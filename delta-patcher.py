@@ -116,8 +116,7 @@ class DeltaPatcher:
             if 'src' not in dst:
                 print(f'Copying {dst_filename}...')
                 pch_filename = os.path.join(self.pch, dst_filename)
-                os.makedirs(os.path.dirname(pch_filename), exist_ok=True)
-                shutil.copyfile(os.path.join(self.dst, dst_filename), pch_filename)
+                self.copyfile(os.path.join(self.dst, dst_filename), pch_filename)
                 self.manifest['pch'][os.path.relpath(pch_filename, self.pch)] = {
                     'sha256': self.generate_hash(pch_filename)
                 }
@@ -184,14 +183,14 @@ class DeltaPatcher:
             pch_delta_hash = self.generate_hash(os.path.join(self.pch, pch_delta_filename))
             # check if destination already matches
             if dst_hash == self.manifest['dst'][dst_filename]['sha256']:
-                print(f'skipping already matching {dst_filename}')
+                print(f'Skipping already matching {dst_filename}')
                 continue;
             elif dst_filename in self.manifest['src'] and dst_hash == self.manifest['src'][dst_filename]['sha256']:
                 # look for source file matching the expected hash
                 if self.generate_hash(os.path.join(self.src, dst_filename)) == self.manifest['src'][dst_filename]['sha256']:
                     # look for xdelta3 filename
                     if 'xdelta3' in self.manifest['dst'][dst_filename]:
-                        print(f'patching {dst_filename}...')
+                        print(f'Patching {dst_filename}...')
                         pch_filename = os.path.join(self.pch, self.manifest['dst'][dst_filename]['xdelta3'])
                         src_filename = os.path.join(self.src, self.manifest['dst'][dst_filename]['src'])
                         out_filename = os.path.join(self.dst, dst_filename)
@@ -210,7 +209,7 @@ class DeltaPatcher:
                 if self.generate_hash(os.path.join(self.pch, pch_delta_filename)) == self.manifest['pch'][pch_delta_filename]['sha256']:
                     # look for xdelta3 filename
                     if 'xdelta3' in self.manifest['dst'][dst_filename]:
-                        print(f'patching {dst_filename}...')
+                        print(f'Patching {dst_filename}...')
                         pch_filename = os.path.join(self.pch, self.manifest['dst'][dst_filename]['xdelta3'])
                         src_filename = os.path.join(self.src, self.manifest['dst'][dst_filename]['src'])
                         out_filename = os.path.join(self.dst, dst_filename)
@@ -225,9 +224,8 @@ class DeltaPatcher:
                 else:
                     self.error(f'Missing {dst_filename} 1')
             elif dst_filename in self.manifest['pch'] and pch_hash == self.manifest['pch'][dst_filename]['sha256']:
-                print(f'copying {dst_filename}')
-                os.makedirs(os.path.dirname(os.path.join(self.dst, dst_filename)), exist_ok=True)
-                shutil.copyfile(os.path.join(self.pch, dst_filename), os.path.join(self.dst, dst_filename))
+                print(f'Copying {dst_filename}')
+                self.copyfile(os.path.join(self.pch, dst_filename), os.path.join(self.dst, dst_filename))
             else:
                 self.error(f'Missing {dst_filename} 2')
 
@@ -246,10 +244,12 @@ class DeltaPatcher:
             if src_filename not in self.manifest['dst']:
                 self.error(f'{src_filename}: missing from {self.dst}')
             elif self.manifest['src'][src_filename]['sha256'] != self.manifest['dst'][src_filename]['sha256']:
-                print(os.path.join(self.src, src_filename), self.manifest['src'][src_filename]['sha256'])
-                print(os.path.join(self.dst, src_filename), self.manifest['dst'][src_filename]['sha256'])
                 self.error(f'{src_filename}: sha256 mismatch!')
             print(f'{src_filename}: OK')
+
+    def copyfile(self, src, dst):
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        shutil.copyfile(src, dst)
 
     def verbose(self, str):
         if self.args.verbose:
