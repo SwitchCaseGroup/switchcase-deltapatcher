@@ -110,7 +110,7 @@ class DeltaPatcher:
                 pch_filename = os.path.join(self.pch, dst_filename + ".xdelta3")
                 os.makedirs(os.path.dirname(pch_filename), exist_ok=True)
                 command = [
-                    "xdelta3", "-e",
+                    "xdelta3", "-e", "-9",
                     "-s", os.path.join(self.src, dst_filename), os.path.join(self.dst, dst_filename), pch_filename
                 ]
                 subprocess.check_output(command, universal_newlines=True)
