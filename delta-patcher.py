@@ -51,21 +51,22 @@ class DeltaPatcher:
         print(f'Generating sha256 hashes for destination files...')
         self.generate_hashes(["dst"])
 
-        # iterate through our regex patterns, matching against all source files
-        print(f'Processing source files...')
+        # search for modified files and generate xdelta3 patches for them
+        print(f'Creating deltas for modified files...')
         for (src_regex, dst_regex) in [ pattern.split(':') for pattern in self.pat ]:
             compiled = re.compile(src_regex)
             for src_match in filter(None, [ compiled.match(src_filename) for src_filename in self.src_files]):
                 # if the regex pattern matched, find all destination matches
-                self.verbose(f'Matched source "{src_regex}" => {src_match[0]}')
+                print(f'Matched source "{src_regex}" => {src_match[0]}')
                 # replace destination pattern {N} variables with results from source regex
+                dst_regex_new = dst_regex
                 for group in range(compiled.groups):
-                    dst_regex = dst_regex.replace('{' + str(group) + '}', src_match[group+1])
+                    dst_regex_new = dst_regex_new.replace('{' + str(group) + '}', src_match[group+1])
                 # handle destination file regex matches
-                self.match_dst(src_match[0], dst_regex);
+                self.match_dst(src_match[0], dst_regex_new);
 
         # handle added files by copying over the destination file directly
-        print(f'Processing added files...')
+        print(f'Copying added files...')
         for dst_filename in [dst_filename for dst_filename in self.manifest['dst'] if 'src' not in self.manifest['dst'][dst_filename]]:
             print(f'Copying {dst_filename}...')
             pch_filename = os.path.join(self.pch, dst_filename)
@@ -87,7 +88,7 @@ class DeltaPatcher:
             dst = self.manifest['dst'].get(dst_filename)
             # skip if we already have an earlier match
             if 'src' in dst:
-                print(f'Skipping duplicate match {compiled} => {dst_filename}')
+                print(f'Skipping duplicate match {dst_regex} => {dst_filename}')
                 continue
 
             # if the regex pattern matched, 
