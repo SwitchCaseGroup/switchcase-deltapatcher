@@ -116,6 +116,7 @@ class DeltaPatcher:
             if 'src' not in dst:
                 print(f'Copying {dst_filename}...')
                 pch_filename = os.path.join(self.pch, dst_filename)
+                os.makedirs(os.path.dirname(pch_filename), exist_ok=True)
                 shutil.copyfile(os.path.join(self.dst, dst_filename), pch_filename)
                 self.manifest['pch'][os.path.relpath(pch_filename, self.pch)] = {
                     'sha256': self.generate_hash(pch_filename)
@@ -225,6 +226,7 @@ class DeltaPatcher:
                     self.error(f'Missing {dst_filename} 1')
             elif dst_filename in self.manifest['pch'] and pch_hash == self.manifest['pch'][dst_filename]['sha256']:
                 print(f'copying {dst_filename}')
+                os.makedirs(os.path.dirname(os.path.join(self.dst, dst_filename)), exist_ok=True)
                 shutil.copyfile(os.path.join(self.pch, dst_filename), os.path.join(self.dst, dst_filename))
             else:
                 self.error(f'Missing {dst_filename} 2')
