@@ -64,8 +64,7 @@ class DeltaPatcher:
                 src_match = src_regex.match(src_filename)
                 if not src_match:
                     continue;
-
-                self.verbose(f'  {split[0]} => {src_match[0]}')
+                self.verbose(f'Matched source "{split[0]}" => {src_match[0]}')
 
                 # If the regex pattern matched, find all destination matches
                 regex_str = split[1]
@@ -76,13 +75,14 @@ class DeltaPatcher:
                     dst_match = dst_regex.match(dst_filename)
                     if not dst_match:
                         continue
+                    self.verbose(f'Matched destination {split[1]} => {dst_match[0]}')
 
                     # Skip if we already have an earlier match
                     if self.manifest['dst'][dst_match[0]]['src']:
+                        self.verbose(f'Skipping duplicate match {split[1]} => {dst_match[0]}')
                         continue
 
                     self.manifest['dst'][dst_match[0]]['src'] = src_match[0]
-                    self.verbose(f'    {src_match[0]} => {dst_match[0]}')
 
                     if src_match[0] not in self.manifest['src']:
                         self.manifest['src'][src_match[0]] = {
@@ -101,12 +101,13 @@ class DeltaPatcher:
             src = self.manifest['src'].get(dst_filename)
             # handle added files by copying over the destination file directly
             if not dst['src']:
-                print(f'  Copying {dst_filename}...')
+                print(f'Copying {dst_filename}...')
                 pch_filename = os.path.join(self.pch, dst_filename)
                 dst['delta'] = pch_filename
                 shutil.copyfile(os.path.join(self.dst, dst_filename), pch_filename)
+            # handle modified files by creating xdelta3 file
             elif src and src['sha256'] != dst['sha256']:
-                print(f'  Creating delta for {dst_filename}...')
+                print(f'Creating delta for {dst_filename}...')
                 pch_filename = os.path.join(self.pch, dst_filename + ".xdelta3")
                 os.makedirs(os.path.dirname(pch_filename), exist_ok=True)
                 command = [
@@ -129,7 +130,7 @@ class DeltaPatcher:
 
     def generate_hash(self, path):
         hash = hashlib.sha256()
-        print(f'  {path}: ', end='')
+        print(f'{path}: ', end='')
         sys.stdout.flush()
         with open(path, 'rb') as source:
             block = source.read(io.DEFAULT_BUFFER_SIZE)
