@@ -3,13 +3,7 @@
 # desc: generates and applies binary delta patches
 # 
 
-import argparse
-import hashlib
-import json
-import sys
-import re
-import os
-import io
+import subprocess, argparse, hashlib, shutil, json, sys, re, os, io
 
 #
 # DeltaPatcher
@@ -27,32 +21,33 @@ class DeltaPatcher:
         arg_parser.add_argument('command', nargs='?', choices=self.commands, default="generate", help='command')
         arg_parser.add_argument('-s', '--src', dest='src', required=True, help='source directory')
         arg_parser.add_argument('-d', '--dst', dest='dst', required=True, help='destination directory')
-        arg_parser.add_argument('-o', '--out', dest='out', required=True, help='patch directory')
+        arg_parser.add_argument('-p', '--patch', dest='pch', required=True, help='patch directory')
         arg_parser.add_argument('-x', '--split', dest='split', default=[ 'uasset' ], nargs="*", help='zero or more split file extensions')
+        arg_parser.add_argument('-v', '--verbose', dest='verbose', action="store_true", help='increase verbosity')
         self.args = arg_parser.parse_args()
         # generate absolute paths
         self.src = os.path.abspath(self.args.src)
         self.dst = os.path.abspath(self.args.dst)
-        self.out = os.path.abspath(self.args.out)
+        self.pch = os.path.abspath(self.args.pch)
         # add default regex pattern and prepare any additional patterns from CLI arguments
         self.pat = [ "(.*):{0}" ]
         for split in self.args.split:
             self.pat += [ "(.*)/(.*)\." + split + ":{0}/{1}\.(.*)" ]
         # collect src/dst filename
         print("Finding files...")
-        self.src_files = [ filename for filename in self.find_files(self.src) ]
-        self.dst_files = [ filename for filename in self.find_files(self.dst) ]
+        self.src_files = [ os.path.relpath(filename, self.src) for filename in self.find_files(self.src) ]
+        self.dst_files = [ os.path.relpath(filename, self.dst) for filename in self.find_files(self.dst) ]
         getattr(globals()['DeltaPatcher'], self.args.command)(self)
 
     def generate(self):
-        os.makedirs(self.out, exist_ok=True)
+        os.makedirs(self.pch, exist_ok=True)
 
         # Add manifest entry for each destination file and hash its file contents
         print(f'Processing {self.dst}...')
         self.manifest = { 
             "dst": {
-                os.path.relpath(filename, self.dst): { 
-                    'sha256': self.generate_hash(filename),
+                filename: { 
+                    'sha256': self.generate_hash(os.path.join(self.dst, filename)),
                     'src': None
                 } 
                 for filename in self.dst_files
@@ -70,8 +65,7 @@ class DeltaPatcher:
                 if not src_match:
                     continue;
 
-                rel_src = os.path.relpath(src_match[0], self.src)
-                print(f'  {split[0]} => {rel_src}')
+                self.verbose(f'  {split[0]} => {src_match[0]}')
 
                 # If the regex pattern matched, find all destination matches
                 regex_str = split[1]
@@ -83,22 +77,47 @@ class DeltaPatcher:
                     if not dst_match:
                         continue
 
-                    rel_dst = os.path.relpath(dst_match[0], self.dst)
                     # Skip if we already have an earlier match
-                    if self.manifest['dst'][rel_dst]['src']:
+                    if self.manifest['dst'][dst_match[0]]['src']:
                         continue
 
-                    self.manifest['dst'][rel_dst]['src'] = rel_src
-                    print(f'    {rel_src} => {rel_dst}')
+                    self.manifest['dst'][dst_match[0]]['src'] = src_match[0]
+                    self.verbose(f'    {src_match[0]} => {dst_match[0]}')
 
-                    if rel_src not in self.manifest['src']:
-                        self.manifest['src'][rel_src] = {
-                            'sha256': self.generate_hash(src_match[0])
+                    if src_match[0] not in self.manifest['src']:
+                        self.manifest['src'][src_match[0]] = {
+                            'sha256': self.generate_hash(os.path.join(self.src, src_match[0]))
                         }
 
-        # convert absolute paths to relative
+        # Clean the patch directory
+        print(f'Cleaning {self.pch}...')
+        for filename in self.find_files(self.pch):
+            os.remove(filename)
+
+        # Iterate through destination files, creating patch files
+        print(f'Generating {self.pch}...')
+        for dst_filename in self.manifest['dst']:
+            dst = self.manifest['dst'].get(dst_filename)
+            src = self.manifest['src'].get(dst_filename)
+            # handle added files by copying over the destination file directly
+            if not dst['src']:
+                print(f'  Copying {dst_filename}...')
+                pch_filename = os.path.join(self.pch, dst_filename)
+                dst['delta'] = pch_filename
+                shutil.copyfile(os.path.join(self.dst, dst_filename), pch_filename)
+            elif src and src['sha256'] != dst['sha256']:
+                print(f'  Creating delta for {dst_filename}...')
+                pch_filename = os.path.join(self.pch, dst_filename + ".xdelta3")
+                os.makedirs(os.path.dirname(pch_filename), exist_ok=True)
+                command = [
+                    "xdelta3", "-e",
+                    "-s", os.path.join(self.src, dst_filename), os.path.join(self.dst, dst_filename), pch_filename
+                ]
+                subprocess.check_output(command, universal_newlines=True)
+
+        # generate manifest file
         print(f'Writing manifest...')
-        with open(os.path.join(self.out, 'manifest.json'), 'w') as outfile:
+        with open(os.path.join(self.pch, 'manifest.json'), 'w') as outfile:
             json.dump(self.manifest, outfile, indent=4)
 
     def find_files(self, path):
@@ -122,6 +141,10 @@ class DeltaPatcher:
 
     def apply(self):
         print("apply");
+
+    def verbose(self, str):
+        if self.args.verbose:
+            print(str)
 
 
 if __name__ == "__main__":
