@@ -42,84 +42,71 @@ class DeltaPatcher:
         self.manifest = { "src": { }, "dst": { }, "pch": { } }
 
     def generate(self):
-        # add manifest entry for each destination file and hash its file contents
-        print(f'Generating sha256 hashes for destination files...')
-        self.generate_hashes(["dst"])
-
         # cleanup the patch directory
         print(f'Cleaning {self.pch}...')
         for filename in self.find_files(self.pch):
             os.remove(filename)
 
+        # add manifest entry for each destination file and hash its file contents
+        print(f'Generating sha256 hashes for destination files...')
+        self.generate_hashes(["dst"])
+
         # iterate through our regex patterns, matching against all source files
         print(f'Processing source files...')
-        for pattern in self.pat:
-            split = pattern.split(':')
-            src_regex = re.compile(split[0])
-            for src_filename in self.src_files:
-                src_match = src_regex.match(src_filename)
-                if not src_match:
-                    continue;
-
+        for (src_regex, dst_regex) in [ pattern.split(':') for pattern in self.pat ]:
+            compiled = re.compile(src_regex)
+            for src_match in filter(None, [ compiled.match(src_filename) for src_filename in self.src_files]):
                 # if the regex pattern matched, find all destination matches
-                self.verbose(f'Matched source "{split[0]}" => {src_match[0]}')
-
+                self.verbose(f'Matched source "{src_regex}" => {src_match[0]}')
                 # replace destination pattern {N} variables with results from source regex
-                regex_str = split[1]
-                for group in range(src_regex.groups):
-                    regex_str = regex_str.replace('{' + str(group) + '}', src_match[group+1])
-                dst_regex = re.compile(regex_str)
+                for group in range(compiled.groups):
+                    dst_regex = dst_regex.replace('{' + str(group) + '}', src_match[group+1])
+                # handle destination file regex matches
+                self.match_dst(src_match[0], dst_regex);
 
-                # iterate through our regex destination pattern, matching against all destination files
-                for dst_filename in self.dst_files:
-                    dst_match = dst_regex.match(dst_filename)
-                    if not dst_match:
-                        continue
+        # handle added files by copying over the destination file directly
+        print(f'Processing added files...')
+        for dst_filename in [dst_filename for dst_filename in self.manifest['dst'] if 'src' not in self.manifest['dst'][dst_filename]]:
+            print(f'Copying {dst_filename}...')
+            pch_filename = os.path.join(self.pch, dst_filename)
+            self.copyfile(os.path.join(self.dst, dst_filename), pch_filename)
+            self.manifest['pch'][os.path.relpath(pch_filename, self.pch)] = {
+                'sha256': self.generate_hash(pch_filename)
+            }
 
-                    # skip if we already have an earlier match
-                    if 'src' in self.manifest['dst'][dst_match[0]]:
-                        print(f'Skipping duplicate match {split[1]} => {dst_match[0]}')
-                        continue
-
-                    # if the regex pattern matched, 
-                    print(f'Matched destination {split[1]} => {dst_match[0]}')
-
-                    self.manifest['dst'][dst_match[0]]['src'] = src_match[0]
-                    if src_match[0] not in self.manifest['src']:
-                        self.manifest['src'][src_match[0]] = {
-                            'sha256': self.generate_hash(os.path.join(self.src, src_match[0]))
-                        }
-
-                    dst = self.manifest['dst'][dst_match[0]]
-                    if self.manifest['src'][src_match[0]]['sha256'] != dst['sha256']:
-                        print(f'Creating delta for {dst_match[0]}...')
-                        self.generate_xdelta3(dst, src_match[0], dst_match[0])
-
-        # iterate through destination files, creating patch files
-        print(f'Generating {self.pch}...')
-        for dst_filename in self.manifest['dst']:
-            dst = self.manifest['dst'].get(dst_filename)
-            src = self.manifest['src'].get(dst_filename)
-            # handle added files by copying over the destination file directly
-            if 'src' not in dst:
-                print(f'Copying {dst_filename}...')
-                pch_filename = os.path.join(self.pch, dst_filename)
-                self.copyfile(os.path.join(self.dst, dst_filename), pch_filename)
-                self.manifest['pch'][os.path.relpath(pch_filename, self.pch)] = {
-                    'sha256': self.generate_hash(pch_filename)
-                }
-            # handle modified files by creating xdelta3 file
-            elif src and src['sha256'] != dst['sha256']:
-                print(f'Creating delta for {dst_filename}...')
-                self.generate_xdelta3(dst, dst_filename, dst_filename)
-
-        # generate manifest file
+        # write the manifest file
         print(f'Writing manifest...')
         with open(os.path.join(self.pch, 'manifest.json'), 'w') as outfile:
             json.dump(self.manifest, outfile, indent=4)
 
+    def match_dst(self, src_filename, dst_regex):
+        compiled = re.compile(dst_regex)
+        # iterate through our regex destination pattern, matching against all destination files
+        for dst_match in filter(None, [ compiled.match(dst_filename) for dst_filename in self.dst_files]):
+            dst_filename = dst_match[0]
+            dst = self.manifest['dst'].get(dst_filename)
+            # skip if we already have an earlier match
+            if 'src' in dst:
+                print(f'Skipping duplicate match {compiled} => {dst_filename}')
+                continue
+
+            # if the regex pattern matched, 
+            print(f'Matched destination {compiled} => {dst_filename}')
+            dst['src'] = src_filename
+
+            # hash the src if not already done
+            if src_filename not in self.manifest['src']:
+                self.manifest['src'][src_filename] = {
+                    'sha256': self.generate_hash(os.path.join(self.src, src_filename))
+                }
+
+            # generate xdelta3 if the files don't already match
+            if self.manifest['src'][src_filename]['sha256'] != dst['sha256']:
+                print(f'Creating delta for {dst_filename}...')
+                self.generate_xdelta3(dst, src_filename, dst_filename)
+
     def apply(self):
-        # read manifest file
+        # read the manifest file
         print(f'Reading manifest...')
         with open(os.path.join(self.pch, 'manifest.json'), 'r') as inpfile:
             self.manifest = json.load(inpfile)
