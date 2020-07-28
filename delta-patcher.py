@@ -183,17 +183,7 @@ class DeltaPatcher:
                     # look for xdelta3 filename
                     if 'xdelta3' in self.manifest['dst'][dst_filename]:
                         print(f'Patching {dst_filename}...')
-                        pch_filename = os.path.join(self.pch, self.manifest['dst'][dst_filename]['xdelta3'])
-                        src_filename = os.path.join(self.src, self.manifest['dst'][dst_filename]['src'])
-                        out_filename = os.path.join(self.dst, dst_filename)
-                        # apply xdelta3 patch
-                        os.makedirs(os.path.dirname(out_filename), exist_ok=True)
-                        command = [
-                            "xdelta3", "-d", "-f",
-                            "-s", src_filename, pch_filename, os.path.join(self.dst, dst_filename)
-                        ]
-                        self.verbose(' '.join(command))
-                        subprocess.check_output(command, universal_newlines=True)
+                        self.apply_xdelta3(dst_filename)
                 else:
                     self.error(f'Missing {dst_filename} 1')
             elif pch_delta_filename in self.manifest['pch'] and pch_delta_hash == self.manifest['pch'][pch_delta_filename]['sha256']:
@@ -202,17 +192,7 @@ class DeltaPatcher:
                     # look for xdelta3 filename
                     if 'xdelta3' in self.manifest['dst'][dst_filename]:
                         print(f'Patching {dst_filename}...')
-                        pch_filename = os.path.join(self.pch, self.manifest['dst'][dst_filename]['xdelta3'])
-                        src_filename = os.path.join(self.src, self.manifest['dst'][dst_filename]['src'])
-                        out_filename = os.path.join(self.dst, dst_filename)
-                        # apply xdelta3 patch
-                        os.makedirs(os.path.dirname(out_filename), exist_ok=True)
-                        command = [
-                            "xdelta3", "-d", "-f",
-                            "-s", src_filename, pch_filename, os.path.join(self.dst, dst_filename)
-                        ]
-                        self.verbose(' '.join(command))
-                        subprocess.check_output(command, universal_newlines=True)
+                        self.apply_xdelta3(dst_filename)
                 else:
                     self.error(f'Missing {dst_filename} 1')
             elif dst_filename in self.manifest['pch'] and pch_hash == self.manifest['pch'][dst_filename]['sha256']:
@@ -226,6 +206,19 @@ class DeltaPatcher:
             if filename not in self.manifest['dst']:
                 print(f'Removing {filename}...')
                 os.remove(os.path.join(self.dst, filename))
+
+    def apply_xdelta3(self, dst_filename):
+        pch_filename = os.path.join(self.pch, self.manifest['dst'][dst_filename]['xdelta3'])
+        src_filename = os.path.join(self.src, self.manifest['dst'][dst_filename]['src'])
+        out_filename = os.path.join(self.dst, dst_filename)
+        # apply xdelta3 patch
+        os.makedirs(os.path.dirname(out_filename), exist_ok=True)
+        command = [
+            "xdelta3", "-d", "-f",
+            "-s", src_filename, pch_filename, os.path.join(self.dst, dst_filename)
+        ]
+        self.verbose(' '.join(command))
+        subprocess.check_output(command, universal_newlines=True)
 
     def validate(self):
         print(f'Generating hashes...')
