@@ -85,7 +85,6 @@ class DeltaPatcher:
                     print(f'Matched destination {split[1]} => {dst_match[0]}')
 
                     self.manifest['dst'][dst_match[0]]['src'] = src_match[0]
-
                     if src_match[0] not in self.manifest['src']:
                         self.manifest['src'][src_match[0]] = {
                             'sha256': self.generate_hash(os.path.join(self.src, src_match[0]))
@@ -118,47 +117,6 @@ class DeltaPatcher:
         print(f'Writing manifest...')
         with open(os.path.join(self.pch, 'manifest.json'), 'w') as outfile:
             json.dump(self.manifest, outfile, indent=4)
-
-    def find_files(self, path):
-        if not os.path.isfile(path):
-            for current in os.listdir(path):
-                yield from self.find_files(os.path.join(path, current))
-        else:
-            yield path
-
-    def generate_hashes(self, dirs):
-        for dir in dirs:
-            for filename in getattr(self, f'{dir}_files'):
-                self.manifest[dir][filename] = {
-                    'sha256': self.generate_hash(os.path.join(self.dst, filename))
-                }
-
-    def generate_hash(self, path):
-        self.verbose(f'Hashing {path}...')
-        hash = hashlib.sha256()
-        try:
-            with open(path, 'rb') as source:
-                block = source.read(io.DEFAULT_BUFFER_SIZE)
-                while len(block) != 0:
-                    hash.update(block)
-                    block = source.read(io.DEFAULT_BUFFER_SIZE)
-        except:
-            pass
-        return hash.hexdigest()
-
-    def generate_xdelta3(self, dst, src_filename, dst_filename):
-        pch_filename = os.path.join(self.pch, dst_filename + ".xdelta3")
-        os.makedirs(os.path.dirname(pch_filename), exist_ok=True)
-        command = [
-            "xdelta3", "-e", "-9", "-f",
-            "-s", os.path.join(self.src, src_filename), os.path.join(self.dst, dst_filename), pch_filename
-        ]
-        self.verbose(' '.join(command))
-        subprocess.check_output(command, universal_newlines=True)
-        dst['xdelta3'] = os.path.relpath(pch_filename, self.pch)
-        self.manifest['pch'][dst['xdelta3']] = {
-            'sha256': self.generate_hash(pch_filename)
-        }
 
     def apply(self):
         # read manifest file
@@ -206,6 +164,47 @@ class DeltaPatcher:
             if filename not in self.manifest['dst']:
                 print(f'Removing {filename}...')
                 os.remove(os.path.join(self.dst, filename))
+
+    def find_files(self, path):
+        if not os.path.isfile(path):
+            for current in os.listdir(path):
+                yield from self.find_files(os.path.join(path, current))
+        else:
+            yield path
+
+    def generate_hashes(self, dirs):
+        for dir in dirs:
+            for filename in getattr(self, f'{dir}_files'):
+                self.manifest[dir][filename] = {
+                    'sha256': self.generate_hash(os.path.join(self.dst, filename))
+                }
+
+    def generate_hash(self, path):
+        self.verbose(f'Hashing {path}...')
+        hash = hashlib.sha256()
+        try:
+            with open(path, 'rb') as source:
+                block = source.read(io.DEFAULT_BUFFER_SIZE)
+                while len(block) != 0:
+                    hash.update(block)
+                    block = source.read(io.DEFAULT_BUFFER_SIZE)
+        except:
+            pass
+        return hash.hexdigest()
+
+    def generate_xdelta3(self, dst, src_filename, dst_filename):
+        pch_filename = os.path.join(self.pch, dst_filename + ".xdelta3")
+        os.makedirs(os.path.dirname(pch_filename), exist_ok=True)
+        command = [
+            "xdelta3", "-e", "-9", "-f",
+            "-s", os.path.join(self.src, src_filename), os.path.join(self.dst, dst_filename), pch_filename
+        ]
+        self.verbose(' '.join(command))
+        subprocess.check_output(command, universal_newlines=True)
+        dst['xdelta3'] = os.path.relpath(pch_filename, self.pch)
+        self.manifest['pch'][dst['xdelta3']] = {
+            'sha256': self.generate_hash(pch_filename)
+        }
 
     def apply_xdelta3(self, dst_filename):
         pch_filename = os.path.join(self.pch, self.manifest['dst'][dst_filename]['xdelta3'])
