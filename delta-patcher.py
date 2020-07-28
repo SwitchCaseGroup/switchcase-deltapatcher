@@ -1,15 +1,9 @@
 #
 # file: delta-patcher.py
-# desc: generates and applies binary delta patches
+# desc: Binary delta patching tool
 # 
 
 import subprocess, argparse, hashlib, shutil, json, sys, re, os, io
-
-#
-# DeltaPatcher
-#
-# Generates and applies binary delta patches
-#
 
 class DeltaPatcher:
     # currently supported CLI commands
@@ -17,7 +11,7 @@ class DeltaPatcher:
 
     def __init__(self):
         # parse command-line arguments and execute the command
-        arg_parser = argparse.ArgumentParser(description='Generate and apply binary delta patches', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+        arg_parser = argparse.ArgumentParser(description='Binary delta patching tool.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
         arg_parser.add_argument('command', nargs='?', choices=self.commands, default="generate", help='command')
         arg_parser.add_argument('-s', '--src', dest='src', required=True, help='source directory')
         arg_parser.add_argument('-d', '--dst', dest='dst', required=True, help='destination directory')
@@ -25,42 +19,42 @@ class DeltaPatcher:
         arg_parser.add_argument('-x', '--split', dest='split', default=[ 'uasset' ], nargs="*", help='zero or more split file extensions')
         arg_parser.add_argument('-v', '--verbose', dest='verbose', action="store_true", help='increase verbosity')
         self.args = arg_parser.parse_args()
-        # generate absolute paths
-        self.src = os.path.abspath(self.args.src)
-        self.dst = os.path.abspath(self.args.dst)
-        self.pch = os.path.abspath(self.args.pch)
-        # ensure paths exist
-        os.makedirs(self.src, exist_ok=True)
-        os.makedirs(self.dst, exist_ok=True)
-        os.makedirs(self.pch, exist_ok=True)
+        self.initialize()
+        getattr(globals()['DeltaPatcher'], self.args.command)(self)
+
+    def initialize(self):
+        # initialize directories
+        print(f'Recursively gathering filenames...')
+        for dir in [ 'src', 'dst', 'pch' ]:
+            # convert dirs to absolute paths
+            setattr(self, dir, os.path.abspath(getattr(self.args, dir)))
+            # ensure directories exist
+            os.makedirs(getattr(self, dir), exist_ok=True)
+            # find all files in each directory
+            setattr(self, f'{dir}_files', [ os.path.relpath(filename, getattr(self, dir)) for filename in self.find_files(getattr(self, dir)) ])
+
         # add default regex pattern and prepare any additional patterns from CLI arguments
         self.pat = [ "(.*):{0}" ]
         for split in self.args.split:
             self.pat += [ "(.*)/(.*)\." + split + ":{0}/{1}\.(.*)" ]
-        # collect src/dst filename
-        print("Finding files...")
-        self.src_files = [ os.path.relpath(filename, self.src) for filename in self.find_files(self.src) ]
-        self.dst_files = [ os.path.relpath(filename, self.dst) for filename in self.find_files(self.dst) ]
-        self.pch_files = [ os.path.relpath(filename, self.dst) for filename in self.find_files(self.dst) ]
-        getattr(globals()['DeltaPatcher'], self.args.command)(self)
+
+        # initialize blank manifest
+        self.manifest = { "src": { }, "dst": { }, "pch": { } }
+
+    def generate_hashes(self, dirs):
+        for dir in dirs:
+            for filename in getattr(self, f'{dir}_files'):
+                self.manifest[dir][filename] = {
+                    'sha256': self.generate_hash(os.path.join(self.dst, filename))
+                }
 
     def generate(self):
         # add manifest entry for each destination file and hash its file contents
-        print(f'Processing {self.dst}...')
-        self.manifest = { 
-            "src": { },
-            "dst": {
-                filename: { 
-                    'sha256': self.generate_hash(os.path.join(self.dst, filename)),
-                    'src': None
-                } 
-                for filename in self.dst_files
-            },
-            "pch": { }
-        }
+        print(f'Generating sha256 hashes for destination files...')
+        self.generate_hashes(["dst"])
 
         # iterate through our regex patterns, matching against all source files
-        print(f'Processing {self.src}...')
+        print(f'Processing source files...')
         for pattern in self.pat:
             split = pattern.split(':')
             src_regex = re.compile(split[0])
@@ -82,7 +76,7 @@ class DeltaPatcher:
                     self.verbose(f'Matched destination {split[1]} => {dst_match[0]}')
 
                     # skip if we already have an earlier match
-                    if self.manifest['dst'][dst_match[0]]['src']:
+                    if 'src' in self.manifest['dst'][dst_match[0]]:
                         self.verbose(f'Skipping duplicate match {split[1]} => {dst_match[0]}')
                         continue
 
@@ -104,7 +98,7 @@ class DeltaPatcher:
             dst = self.manifest['dst'].get(dst_filename)
             src = self.manifest['src'].get(dst_filename)
             # handle added files by copying over the destination file directly
-            if not dst['src']:
+            if 'src' not in dst:
                 print(f'Copying {dst_filename}...')
                 pch_filename = os.path.join(self.pch, dst_filename)
                 shutil.copyfile(os.path.join(self.dst, dst_filename), pch_filename)
@@ -199,20 +193,7 @@ class DeltaPatcher:
 
     def validate(self):
         print(f'Generating hashes...')
-        self.manifest = { 
-            "src": {
-                filename: { 'sha256': self.generate_hash(os.path.join(self.src, filename)) } 
-                for filename in self.src_files
-            },
-            "dst": {
-                filename: { 'sha256': self.generate_hash(os.path.join(self.dst, filename)) } 
-                for filename in self.dst_files
-            },
-            "pch": { 
-                filename: { 'sha256': self.generate_hash(os.path.join(self.pch, filename)) } 
-                for filename in self.pch_files
-            }
-        }
+        self.generate_hashes(['src', 'dst', 'pch'])
 
         # validate src vs dst directly
         for src_filename in self.manifest['src']:
