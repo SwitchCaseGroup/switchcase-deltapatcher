@@ -4,6 +4,7 @@
 # 
 
 import argparse
+import os
 
 class DeltaPatcher:
     # currently supported CLI commands
@@ -18,15 +19,24 @@ class DeltaPatcher:
         arg_parser.add_argument('-o', '--out', dest='out', required=True, help='output patch directory')
         arg_parser.add_argument('-p', '--pat', dest='pattern', nargs="*", help='zero or more merge patterns')
         self.args = arg_parser.parse_args()
+        self.src = os.path.abspath(self.args.src)
+        self.dst = os.path.abspath(self.args.dst)
+        self.out = os.path.abspath(self.args.out)
         getattr(globals()['DeltaPatcher'], self.args.command)(self)
 
     def generate(self):
-        print(f'src: {self.args.src}');
-        print(f'dst: {self.args.dst}');
-        print(f'out: {self.args.out}');
-        print(f'pattern: {self.args.pattern}');
+        self.manifest = { entry for entry in self.find_files(self.src) }
+        for entry in self.manifest:
+            print(entry)
 
-    def appl(self):
+    def find_files(self, path):
+        if not os.path.isfile(path):
+            for current in os.listdir(path):
+                yield from self.find_files(os.path.join(path, current))
+        else:
+            yield path
+
+    def apply(self):
         print("apply");
 
 
