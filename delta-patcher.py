@@ -94,18 +94,7 @@ class DeltaPatcher:
                     dst = self.manifest['dst'][dst_match[0]]
                     if self.manifest['src'][src_match[0]]['sha256'] != dst['sha256']:
                         print(f'Creating delta for {dst_match[0]}...')
-                        pch_filename = os.path.join(self.pch, dst_match[0] + ".xdelta3")
-                        os.makedirs(os.path.dirname(pch_filename), exist_ok=True)
-                        command = [
-                            "xdelta3", "-e", "-9", "-f",
-                            "-s", os.path.join(self.src, src_match[0]), os.path.join(self.dst, dst_match[0]), pch_filename
-                        ]
-                        self.verbose(' '.join(command))
-                        subprocess.check_output(command, universal_newlines=True)
-                        dst['xdelta3'] = os.path.relpath(pch_filename, self.pch)
-                        self.manifest['pch'][dst['xdelta3']] = {
-                            'sha256': self.generate_hash(pch_filename)
-                        }
+                        self.generate_xdelta3(dst, src_match[0], dst_match[0])
 
         # iterate through destination files, creating patch files
         print(f'Generating {self.pch}...')
@@ -123,18 +112,7 @@ class DeltaPatcher:
             # handle modified files by creating xdelta3 file
             elif src and src['sha256'] != dst['sha256']:
                 print(f'Creating delta for {dst_filename}...')
-                pch_filename = os.path.join(self.pch, dst_filename + ".xdelta3")
-                os.makedirs(os.path.dirname(pch_filename), exist_ok=True)
-                command = [
-                    "xdelta3", "-e", "-9", "-f",
-                    "-s", os.path.join(self.src, dst_filename), os.path.join(self.dst, dst_filename), pch_filename
-                ]
-                self.verbose(' '.join(command))
-                subprocess.check_output(command, universal_newlines=True)
-                dst['xdelta3'] = os.path.relpath(pch_filename, self.pch)
-                self.manifest['pch'][dst['xdelta3']] = {
-                    'sha256': self.generate_hash(pch_filename)
-                }
+                self.generate_xdelta3(dst, dst_filename, dst_filename)
 
         # generate manifest file
         print(f'Writing manifest...')
@@ -167,6 +145,20 @@ class DeltaPatcher:
         except:
             pass
         return hash.hexdigest()
+
+    def generate_xdelta3(self, dst, src_filename, dst_filename):
+        pch_filename = os.path.join(self.pch, dst_filename + ".xdelta3")
+        os.makedirs(os.path.dirname(pch_filename), exist_ok=True)
+        command = [
+            "xdelta3", "-e", "-9", "-f",
+            "-s", os.path.join(self.src, src_filename), os.path.join(self.dst, dst_filename), pch_filename
+        ]
+        self.verbose(' '.join(command))
+        subprocess.check_output(command, universal_newlines=True)
+        dst['xdelta3'] = os.path.relpath(pch_filename, self.pch)
+        self.manifest['pch'][dst['xdelta3']] = {
+            'sha256': self.generate_hash(pch_filename)
+        }
 
     def apply(self):
         # read manifest file
