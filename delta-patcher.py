@@ -13,7 +13,7 @@ import subprocess, argparse, hashlib, shutil, json, sys, re, os, io
 
 class DeltaPatcher:
     # currently supported CLI commands
-    commands = [ "generate", "apply" ]
+    commands = [ "generate", "apply", "validate" ]
 
     def __init__(self):
         # parse command-line arguments and execute the command
@@ -29,6 +29,10 @@ class DeltaPatcher:
         self.src = os.path.abspath(self.args.src)
         self.dst = os.path.abspath(self.args.dst)
         self.pch = os.path.abspath(self.args.pch)
+        # ensure paths exist
+        os.makedirs(self.src, exist_ok=True)
+        os.makedirs(self.dst, exist_ok=True)
+        os.makedirs(self.pch, exist_ok=True)
         # add default regex pattern and prepare any additional patterns from CLI arguments
         self.pat = [ "(.*):{0}" ]
         for split in self.args.split:
@@ -37,14 +41,14 @@ class DeltaPatcher:
         print("Finding files...")
         self.src_files = [ os.path.relpath(filename, self.src) for filename in self.find_files(self.src) ]
         self.dst_files = [ os.path.relpath(filename, self.dst) for filename in self.find_files(self.dst) ]
+        self.pch_files = [ os.path.relpath(filename, self.dst) for filename in self.find_files(self.dst) ]
         getattr(globals()['DeltaPatcher'], self.args.command)(self)
 
     def generate(self):
-        os.makedirs(self.pch, exist_ok=True)
-
-        # Add manifest entry for each destination file and hash its file contents
+        # add manifest entry for each destination file and hash its file contents
         print(f'Processing {self.dst}...')
         self.manifest = { 
+            "src": { },
             "dst": {
                 filename: { 
                     'sha256': self.generate_hash(os.path.join(self.dst, filename)),
@@ -52,10 +56,10 @@ class DeltaPatcher:
                 } 
                 for filename in self.dst_files
             },
-            "src": { }
+            "pch": { }
         }
 
-        # Iterate through our regex patterns, matching against all source files
+        # iterate through our regex patterns, matching against all source files
         print(f'Processing {self.src}...')
         for pattern in self.pat:
             split = pattern.split(':')
@@ -66,7 +70,7 @@ class DeltaPatcher:
                     continue;
                 self.verbose(f'Matched source "{split[0]}" => {src_match[0]}')
 
-                # If the regex pattern matched, find all destination matches
+                # if the regex pattern matched, find all destination matches
                 regex_str = split[1]
                 for group in range(src_regex.groups):
                     regex_str = regex_str.replace('{' + str(group) + '}', src_match[group+1])
@@ -77,7 +81,7 @@ class DeltaPatcher:
                         continue
                     self.verbose(f'Matched destination {split[1]} => {dst_match[0]}')
 
-                    # Skip if we already have an earlier match
+                    # skip if we already have an earlier match
                     if self.manifest['dst'][dst_match[0]]['src']:
                         self.verbose(f'Skipping duplicate match {split[1]} => {dst_match[0]}')
                         continue
@@ -89,12 +93,12 @@ class DeltaPatcher:
                             'sha256': self.generate_hash(os.path.join(self.src, src_match[0]))
                         }
 
-        # Clean the patch directory
+        # clean the patch directory
         print(f'Cleaning {self.pch}...')
         for filename in self.find_files(self.pch):
             os.remove(filename)
 
-        # Iterate through destination files, creating patch files
+        # iterate through destination files, creating patch files
         print(f'Generating {self.pch}...')
         for dst_filename in self.manifest['dst']:
             dst = self.manifest['dst'].get(dst_filename)
@@ -103,18 +107,25 @@ class DeltaPatcher:
             if not dst['src']:
                 print(f'Copying {dst_filename}...')
                 pch_filename = os.path.join(self.pch, dst_filename)
-                dst['delta'] = pch_filename
                 shutil.copyfile(os.path.join(self.dst, dst_filename), pch_filename)
+                self.manifest['pch'][os.path.relpath(pch_filename, self.pch)] = {
+                    'sha256': self.generate_hash(pch_filename)
+                }
             # handle modified files by creating xdelta3 file
             elif src and src['sha256'] != dst['sha256']:
                 print(f'Creating delta for {dst_filename}...')
                 pch_filename = os.path.join(self.pch, dst_filename + ".xdelta3")
                 os.makedirs(os.path.dirname(pch_filename), exist_ok=True)
                 command = [
-                    "xdelta3", "-e", "-9",
+                    "xdelta3", "-e", "-9", "-f",
                     "-s", os.path.join(self.src, dst_filename), os.path.join(self.dst, dst_filename), pch_filename
                 ]
+                self.verbose(' '.join(command))
                 subprocess.check_output(command, universal_newlines=True)
+                dst['xdelta3'] = os.path.relpath(pch_filename, self.pch)
+                self.manifest['pch'][dst['xdelta3']] = {
+                    'sha256': self.generate_hash(pch_filename)
+                }
 
         # generate manifest file
         print(f'Writing manifest...')
@@ -129,24 +140,97 @@ class DeltaPatcher:
             yield path
 
     def generate_hash(self, path):
+        self.verbose(f'Hasing {path}...')
         hash = hashlib.sha256()
-        print(f'{path}: ', end='')
-        sys.stdout.flush()
-        with open(path, 'rb') as source:
-            block = source.read(io.DEFAULT_BUFFER_SIZE)
-            while len(block) != 0:
-                hash.update(block)
+        try:
+            with open(path, 'rb') as source:
                 block = source.read(io.DEFAULT_BUFFER_SIZE)
-        print(hash.hexdigest())
+                while len(block) != 0:
+                    hash.update(block)
+                    block = source.read(io.DEFAULT_BUFFER_SIZE)
+        except:
+            pass
         return hash.hexdigest()
 
     def apply(self):
-        print("apply");
+        # read manifest file
+        print(f'Reading manifest...')
+        with open(os.path.join(self.pch, 'manifest.json'), 'r') as inpfile:
+            self.manifest = json.load(inpfile)
+
+        # look for files which needed to be added or patched
+        print(f'Adding/patching files...')
+        for dst_filename in self.manifest['dst']:
+            dst_hash = self.generate_hash(os.path.join(self.dst, dst_filename))
+            pch_hash = self.generate_hash(os.path.join(self.pch, dst_filename))
+            # check if destination already matches
+            if dst_hash == self.manifest['dst'][dst_filename]['sha256']:
+                print(f'skipping already matching {dst_filename}')
+                continue;
+            elif dst_filename in self.manifest['src'] and dst_hash == self.manifest['src'][dst_filename]['sha256']:
+                # look for source file matching the expected hash
+                if self.generate_hash(os.path.join(self.src, dst_filename)) == self.manifest['src'][dst_filename]['sha256']:
+                    # look for xdelta3 filename
+                    if 'xdelta3' in self.manifest['dst'][dst_filename]:
+                        print(f'patching {dst_filename}...')
+                        pch_filename = os.path.join(self.pch, self.manifest['dst'][dst_filename]['xdelta3'])
+                        out_filename = os.path.join(self.dst, dst_filename)
+                        # apply xdelta3 patch
+                        os.makedirs(os.path.dirname(out_filename), exist_ok=True)
+                        command = [
+                            "xdelta3", "-d", "-f",
+                            "-s", os.path.join(self.src, dst_filename), pch_filename, os.path.join(self.dst, dst_filename)
+                        ]
+                        self.verbose(' '.join(command))
+                        subprocess.check_output(command, universal_newlines=True)
+                else:
+                    self.error(f'Missing {dst_filename} 1')
+            elif dst_filename in self.manifest['pch'] and pch_hash == self.manifest['pch'][dst_filename]['sha256']:
+                print(f'copying {dst_filename}')
+                shutil.copyfile(os.path.join(self.pch, dst_filename), os.path.join(self.dst, dst_filename))
+            else:
+                self.error(f'Missing {dst_filename} 2')
+
+        # remove any files not in the manifest
+        for filename in self.dst_files:
+            if filename not in self.manifest['dst']:
+                print(f'Removing {filename}...')
+                os.remove(os.path.join(self.dst, filename))
+
+    def validate(self):
+        print(f'Generating hashes...')
+        self.manifest = { 
+            "src": {
+                filename: { 'sha256': self.generate_hash(os.path.join(self.src, filename)) } 
+                for filename in self.src_files
+            },
+            "dst": {
+                filename: { 'sha256': self.generate_hash(os.path.join(self.dst, filename)) } 
+                for filename in self.dst_files
+            },
+            "pch": { 
+                filename: { 'sha256': self.generate_hash(os.path.join(self.pch, filename)) } 
+                for filename in self.pch_files
+            }
+        }
+
+        # validate src vs dst directly
+        for src_filename in self.manifest['src']:
+            if src_filename not in self.manifest['dst']:
+                self.error(f'{src_filename}: missing from {self.dst}')
+            elif self.manifest['src'][src_filename]['sha256'] != self.manifest['dst'][src_filename]['sha256']:
+                print(os.path.join(self.src, src_filename), self.manifest['src'][src_filename]['sha256'])
+                print(os.path.join(self.dst, src_filename), self.manifest['dst'][src_filename]['sha256'])
+                self.error(f'{src_filename}: sha256 mismatch!')
+            print(f'{src_filename}: OK')
 
     def verbose(self, str):
         if self.args.verbose:
             print(str)
 
+    def error(self, str):
+        print(str)
+        exit(1)
 
 if __name__ == "__main__":
     delta_patcher = DeltaPatcher()
