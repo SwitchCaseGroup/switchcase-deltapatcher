@@ -75,6 +75,9 @@ class DeltaPatcher:
                 'sha256': self.generate_hash(pch_filename)
             }
 
+        # generate dir list
+        self.manifest['dir'] = [ os.path.relpath(filename, self.dst) for filename in self.find_dirs(self.dst) ]
+
         # write the manifest file
         print(f'Writing manifest...')
         with open(os.path.join(self.pch, 'manifest.json'), 'w') as outfile:
@@ -154,12 +157,24 @@ class DeltaPatcher:
                 print(f'Removing {filename}...')
                 os.remove(os.path.join(self.dst, filename))
 
+        # remove any dirs not in the manifest
+        for dir in [ os.path.relpath(filename, self.dst) for filename in self.find_dirs(self.dst) ]:
+            if dir not in self.manifest['dir']:
+                print(f'Removing {dir}...')
+                shutil.rmtree(os.path.join(self.dst, dir), ignore_errors=True)
+
     def find_files(self, path):
         if not os.path.isfile(path):
             for current in os.listdir(path):
                 yield from self.find_files(os.path.join(path, current))
         else:
             yield path
+
+    def find_dirs(self, path):
+        if not os.path.isfile(path):
+            yield path
+            for current in os.listdir(path):
+                yield from self.find_dirs(os.path.join(path, current))
 
     def generate_hashes(self, dirs):
         for dir in dirs:
