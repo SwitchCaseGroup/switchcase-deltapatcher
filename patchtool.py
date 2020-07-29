@@ -1,5 +1,5 @@
 #
-# file: delta-patcher.py
+# file: patchtool.py
 # desc: Binary delta patching tool
 # 
 
