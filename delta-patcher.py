@@ -210,15 +210,21 @@ class DeltaPatcher:
 
     def validate(self):
         print(f'Generating hashes...')
-        self.generate_hashes(['src', 'dst', 'pch'])
+        self.generate_hashes(['src', 'dst'])
 
-        # validate src vs dst directly
-        for src_filename in self.manifest['src']:
-            if src_filename not in self.manifest['dst']:
+        # validate all src files exist in dst and hashes match
+        for src_filename in self.src_files:
+            if src_filename not in self.dst_files:
                 self.error(f'{src_filename}: missing from {self.dst}')
             elif self.manifest['src'][src_filename]['sha256'] != self.manifest['dst'][src_filename]['sha256']:
                 self.error(f'{src_filename}: sha256 mismatch!')
-            print(f'{src_filename}: OK')
+
+        # validate all dst files exist in src
+        for dst_filename in self.dst_files:
+            if dst_filename not in self.src_files:
+                self.error(f'{dst_filename}: missing from {self.src}')
+
+        print('Validation complete: OK')
 
     def copyfile(self, src, dst):
         os.makedirs(os.path.dirname(dst), exist_ok=True)
