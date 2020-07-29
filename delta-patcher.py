@@ -13,6 +13,7 @@ class DeltaPatcher:
     target_size = 64*1024*1024
     max_file_size = 8*500*1024
     max_chunk_size = max_file_size / 1024
+    changed_bytes = 0
 
     # note that modify and split can both be applied to the same source file
     chance_remove = (0, 10)
@@ -198,7 +199,8 @@ class DeltaPatcher:
             subprocess.check_call(command, universal_newlines=True)
             command = [ 'xdelta3', '-e', '-9', '-f', '-s', f'{self.src}.tar', f'{self.dst}.tar', 'tar-patch.xdelta3' ]
             subprocess.check_call(command, universal_newlines=True)
-            command = [ 'du', self.pch, 'tar-patch.xdelta3', '-s' ]
+            print(str(int(self.changed_bytes / 1024)).ljust(8) + "modified/added")
+            command = [ 'du', self.src, self.dst, self.pch, 'tar-patch.xdelta3', '-s' ]
             subprocess.check_call(command, universal_newlines=True)
         except:
             print("Failed")
@@ -236,7 +238,9 @@ class DeltaPatcher:
                 if choice >= self.chance_split[0] and choice < self.chance_split[1]:
                     self.split_file(filename)
         # randomly add new files
-        self.generate_random(self.dst, int(self.target_size * (self.chance_add[1] - self.chance_add[0]) / 100))
+        new_size = int(self.target_size * (self.chance_add[1] - self.chance_add[0]) / 100)
+        self.changed_bytes += new_size
+        self.generate_random(self.dst, new_size)
 
     def permute_file(self, filename):
         size = os.path.getsize(filename)
@@ -253,9 +257,11 @@ class DeltaPatcher:
                     # randomly modify the chunk
                     if choice >= self.chance_modify[0] and choice < self.chance_modify[1]:
                         block = os.urandom(len(block))
+                        self.changed_bytes += len(block)
                     # randomly add new chunks
                     if choice >= self.chance_add[0] and choice < self.chance_add[1]:
                         blocks.append(os.urandom(len(block)))
+                        self.changed_bytes += len(block)
                     # copy block
                     blocks.append(block)
                 size -= chunk_size
