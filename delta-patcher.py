@@ -46,6 +46,8 @@ class DeltaPatcher:
         print(f'Cleaning {self.pch}...')
         for filename in self.find_files(self.pch):
             os.remove(filename)
+        for dir in os.listdir(self.pch):
+            shutil.rmtree(os.path.join(self.pch, dir), ignore_errors=True)
 
         # add manifest entry for each destination file and hash its file contents
         print(f'Generating sha256 hashes for destination files...')
