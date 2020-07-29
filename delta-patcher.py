@@ -12,9 +12,10 @@ class DeltaPatcher:
     # test configuration
     target_size = 8*1024*1024
     max_file_size = 500*1024
-    chance_modify = (0, 20)
-    chance_add = (20, 30)
-    chance_remove = (30, 40)
+    max_chunk_size = max_file_size / 1024
+    chance_modify = (0, 10)
+    chance_add = (10, 20)
+    chance_remove = (20, 30)
 
     def __init__(self):
         # parse command-line arguments and execute the command
@@ -110,14 +111,14 @@ class DeltaPatcher:
             # check if there is an exact file match in src directory
             if dst_filename in self.manifest['src']:
                 src_hash = self.generate_hash(os.path.join(self.src, dst_filename))
-                if src_hash == self.manifest['src'][dst_filename]['sha256']:
+                if src_hash == self.manifest['src'][dst_filename]['sha256'] and src_hash == self.manifest['dst'][dst_filename]['sha256']:
                     self.verbose(f'Copying {dst_filename}')
                     self.copyfile(os.path.join(self.src, dst_filename), os.path.join(self.dst, dst_filename))
                     continue
             # check if there is an exact file match in patch directory
             if dst_filename in self.manifest['pch']:
                 pch_hash = self.generate_hash(os.path.join(self.pch, dst_filename))
-                if pch_hash == self.manifest['pch'][dst_filename]['sha256']:
+                if pch_hash == self.manifest['pch'][dst_filename]['sha256'] and pch_hash == self.manifest['dst'][dst_filename]['sha256']:
                     self.verbose(f'Copying {dst_filename}')
                     self.copyfile(os.path.join(self.pch, dst_filename), os.path.join(self.dst, dst_filename))
                     continue
@@ -177,21 +178,22 @@ class DeltaPatcher:
         self.generate_random(self.pch, self.target_size)
         self.generate_random(self.out, self.target_size)
         self.initialize()
-        self.permute_random()
+        self.permute_dir(self.src, self.dst, self.src_files)
         # perform generate/apply/validate operations
         try:
-            command = [ sys.executable, __file__, 'generate', '-s', self.src, '-d', self.dst, '-p', self.pch, "--verbose" if self.args.verbose else None ]
+            command = [ sys.executable, __file__, 'generate', '-s', self.src, '-d', self.dst, '-p', self.pch ]
+            subprocess.check_call(command + [ "--verbose" ] if self.args.verbose else command, universal_newlines=True)
+            command = [ sys.executable, __file__, 'apply', '-s', self.src, '-d', self.out, '-p', self.pch ]
+            subprocess.check_call(command + [ "--verbose" ] if self.args.verbose else command, universal_newlines=True)
+            command = [ sys.executable, __file__, 'validate', '-s', self.dst, '-d', self.out, '-p', self.pch ]
+            subprocess.check_call(command + [ "--verbose" ] if self.args.verbose else command, universal_newlines=True)
+            command = [ 'diff', '-q', '-r', self.dst, self.out ]
             subprocess.check_call(command, universal_newlines=True)
-            command = [ sys.executable, __file__, 'apply', '-s', self.src, '-d', self.out, '-p', self.pch, "--verbose" if self.args.verbose else None ]
-            subprocess.check_call(command, universal_newlines=True)
-            command = [ sys.executable, __file__, 'validate', '-s', self.dst, '-d', self.out, '-p', self.pch, "--verbose" if self.args.verbose else None ]
-            subprocess.check_call(command, universal_newlines=True)
-            command = [ 'diff', '-q', '-r', self.src, self.dst ]
         except:
             print("Failed")
             exit(1)
         # remove test data
-        self.cleanup()
+        #self.cleanup()
 
     def generate_random(self, path, size):
         while size:
@@ -205,24 +207,47 @@ class DeltaPatcher:
                 outfile.write(os.urandom(file_size))
             size -= file_size
 
-    def permute_random(self):
-        for filename in self.src_files:
+    def permute_dir(self, src, dst, files):
+        # randomly copy/modify/remove
+        for filename in files:
             choice = random.randint(0, 99)
-            src_filename = os.path.join(self.src, filename)
-            dst_filename = os.path.join(self.dst, filename)
-            # copy file to destination
-            os.makedirs(os.path.dirname(dst_filename), exist_ok=True)
-            shutil.copyfile(src_filename, dst_filename)
-            # randomly modify the file
-            if choice >= self.chance_modify[0] and choice < self.chance_modify[1]:
-                pass # @todo
-            # randomly copy the file to another file
-            if choice >= self.chance_add[0] and choice < self.chance_add[1]:
-                filename_add = os.path.join(self.dst, os.path.dirname(filename), self.generate_id())
-                shutil.copyfile(src_filename, filename_add)
-            # randomly remove files
-            if choice >= self.chance_remove[0] and choice < self.chance_remove[1]:
-                os.remove(dst_filename)
+            src_filename = os.path.join(src, filename)
+            dst_filename = os.path.join(dst, filename)
+            # randomly skip ("remove") files
+            if choice < self.chance_remove[0] or choice >= self.chance_remove[1]:
+                # copy file to destination
+                os.makedirs(os.path.dirname(dst_filename), exist_ok=True)
+                shutil.copyfile(src_filename, dst_filename)
+                # randomly modify the file
+                if choice >= self.chance_modify[0] and choice < self.chance_modify[1]:
+                    self.permute_file(dst_filename)
+        # randomly add new files
+        self.generate_random(self.dst, int(self.target_size * (self.chance_add[1] - self.chance_add[0]) / 100))
+
+    def permute_file(self, filename):
+        size = os.path.getsize(filename)
+        blocks = []
+        # read file in random block sizes
+        with open(filename, 'rb') as inpfile:
+            while size != 0:
+                # read the next chunk of data
+                chunk_size = random.randint(1, min(self.max_chunk_size, size))
+                block = inpfile.read(chunk_size)
+                choice = random.randint(0, 99)
+                # randomly modify the chunk
+                if choice >= self.chance_modify[0] and choice < self.chance_modify[1]:
+                    block = os.urandom(len(block))
+                # randomly copy the chunk
+                if choice >= self.chance_add[0] and choice < self.chance_add[1]:
+                    blocks.append(block)
+                # randomly remove the chunk
+                if choice < self.chance_remove[0] or choice >= self.chance_remove[1]:
+                    blocks.append(block)
+                size -= chunk_size
+        # write the blocks back to the file
+        with open(filename, 'wb') as outfile:
+            for block in blocks:
+                outfile.write(block)
 
     def cleanup(self):
         shutil.rmtree(self.src, ignore_errors=True)
@@ -278,11 +303,11 @@ class DeltaPatcher:
         self.verbose(f'Hashing {path}...')
         hash = hashlib.sha256()
         try:
-            with open(path, 'rb') as source:
-                block = source.read(io.DEFAULT_BUFFER_SIZE)
+            with open(path, 'rb') as inpfile:
+                block = inpfile.read(io.DEFAULT_BUFFER_SIZE)
                 while len(block) != 0:
                     hash.update(block)
-                    block = source.read(io.DEFAULT_BUFFER_SIZE)
+                    block = inpfile.read(io.DEFAULT_BUFFER_SIZE)
         except:
             pass
         return hash.hexdigest()
