@@ -102,14 +102,25 @@ class DeltaPatcher:
         # look for files which needed to be added or patched
         self.verbose(f'Adding/patching files...')
         for dst_filename in self.manifest['dst']:
-            dst_hash = self.generate_hash(os.path.join(self.dst, dst_filename))
-            pch_hash = self.generate_hash(os.path.join(self.pch, dst_filename))
-            pch_delta_filename = dst_filename + ".xdelta3"
-            pch_delta_hash = self.generate_hash(os.path.join(self.pch, pch_delta_filename))
             # check if destination already matches
+            dst_hash = self.generate_hash(os.path.join(self.dst, dst_filename))
             if dst_hash == self.manifest['dst'][dst_filename]['sha256']:
                 self.verbose(f'Skipping already matching {dst_filename}')
                 continue;
+            # check if there is an exact file match in src directory
+            if dst_filename in self.manifest['src']:
+                src_hash = self.generate_hash(os.path.join(self.src, dst_filename))
+                if src_hash == self.manifest['src'][dst_filename]['sha256']:
+                    self.verbose(f'Copying {dst_filename}')
+                    self.copyfile(os.path.join(self.src, dst_filename), os.path.join(self.dst, dst_filename))
+                    continue
+            # check if there is an exact file match in patch directory
+            if dst_filename in self.manifest['pch']:
+                pch_hash = self.generate_hash(os.path.join(self.pch, dst_filename))
+                if pch_hash == self.manifest['pch'][dst_filename]['sha256']:
+                    self.verbose(f'Copying {dst_filename}')
+                    self.copyfile(os.path.join(self.pch, dst_filename), os.path.join(self.dst, dst_filename))
+                    continue
             # check if there's an expected patch source in src directory
             if dst_filename in self.manifest['src'] and dst_hash == self.manifest['src'][dst_filename]['sha256']:
                 # validate the source hash matches manifest
@@ -123,6 +134,8 @@ class DeltaPatcher:
                 self.apply_xdelta3(dst_filename)
                 continue
             # check if there's an expected patch source in patch directory
+            pch_delta_filename = dst_filename + ".xdelta3"
+            pch_delta_hash = self.generate_hash(os.path.join(self.pch, pch_delta_filename))
             if pch_delta_filename in self.manifest['pch'] and pch_delta_hash == self.manifest['pch'][pch_delta_filename]['sha256']:
                 # validate the source hash matches manifest
                 if self.generate_hash(os.path.join(self.pch, pch_delta_filename)) != self.manifest['pch'][pch_delta_filename]['sha256']:
@@ -133,11 +146,6 @@ class DeltaPatcher:
                 # apply xdelta3 patch
                 self.verbose(f'Patching {dst_filename}...')
                 self.apply_xdelta3(dst_filename)
-                continue
-            # check if there is an exact file match in patch directory
-            if dst_filename in self.manifest['pch'] and pch_hash == self.manifest['pch'][dst_filename]['sha256']:
-                self.verbose(f'Copying {dst_filename}')
-                self.copyfile(os.path.join(self.pch, dst_filename), os.path.join(self.dst, dst_filename))
                 continue
 
             self.error(f'Found no way to patch {dst_filename}')
@@ -172,16 +180,16 @@ class DeltaPatcher:
         self.permute_random()
         # perform generate/apply/validate operations
         try:
-            command = [ sys.executable, __file__, 'generate', '-s', self.src, '-d', self.dst, '-p', self.pch ]
+            command = [ sys.executable, __file__, 'generate', '-s', self.src, '-d', self.dst, '-p', self.pch, "--verbose" if self.args.verbose else None ]
             subprocess.check_call(command, universal_newlines=True)
-            command = [ sys.executable, __file__, 'apply', '-s', self.src, '-d', self.out, '-p', self.pch ]
+            command = [ sys.executable, __file__, 'apply', '-s', self.src, '-d', self.out, '-p', self.pch, "--verbose" if self.args.verbose else None ]
             subprocess.check_call(command, universal_newlines=True)
-            command = [ sys.executable, __file__, 'validate', '-s', self.dst, '-d', self.out, '-p', self.pch ]
+            command = [ sys.executable, __file__, 'validate', '-s', self.dst, '-d', self.out, '-p', self.pch, "--verbose" if self.args.verbose else None ]
             subprocess.check_call(command, universal_newlines=True)
+            command = [ 'diff', '-q', '-r', self.src, self.dst ]
         except:
             print("Failed")
             exit(1)
-        print("OK")
         # remove test data
         self.cleanup()
 
@@ -206,15 +214,15 @@ class DeltaPatcher:
             os.makedirs(os.path.dirname(dst_filename), exist_ok=True)
             shutil.copyfile(src_filename, dst_filename)
             # randomly modify the file
-            #if choice >= self.chance_modify[0] and choice < self.chance_modify[1]:
-            #    pass
+            if choice >= self.chance_modify[0] and choice < self.chance_modify[1]:
+                pass # @todo
             # randomly copy the file to another file
-            #if choice >= self.chance_add[0] and choice < self.chance_add[1]:
-            #    filename_add = os.path.join(self.dst, os.path.dirname(filename), self.generate_id())
-            #    shutil.copyfile(src_filename, filename_add)
+            if choice >= self.chance_add[0] and choice < self.chance_add[1]:
+                filename_add = os.path.join(self.dst, os.path.dirname(filename), self.generate_id())
+                shutil.copyfile(src_filename, filename_add)
             # randomly remove files
-            #if choice >= self.chance_remove[0] and choice < self.chance_remove[1]:
-            #    os.remove(dst_filename)
+            if choice >= self.chance_remove[0] and choice < self.chance_remove[1]:
+                os.remove(dst_filename)
 
     def cleanup(self):
         shutil.rmtree(self.src, ignore_errors=True)
