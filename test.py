@@ -74,6 +74,9 @@ class PatchToolTest(PatchTool):
             # validate in-place results on src directory
             command = [ sys.executable, "patchtool.py", 'validate', '-s', self.dst, '-d', self.src, '-p', self.pch ]
             subprocess.check_call(command + [ "--verbose" ] if self.args.verbose else command, universal_newlines=True)
+            # diff dst vs src to validate the validation
+            command = [ 'diff', '-q', '-r', self.dst, self.src ]
+            subprocess.check_call(command, universal_newlines=True)
         except:
             print("Failed")
             exit(1)
