@@ -16,9 +16,9 @@ class DeltaPatcher:
 
     # note that modify and split can both be applied to the same source file
     chance_remove = (0, 10)
-    chance_modify = (10, 25)
-    chance_split = (20, 30)
-    chance_add = (30, 40)
+    chance_modify = (10, 40)
+    chance_split = (20, 60)
+    chance_add = (60, 70)
 
     def __init__(self):
         # parse command-line arguments and execute the command
@@ -191,6 +191,14 @@ class DeltaPatcher:
             command = [ sys.executable, __file__, 'validate', '-s', self.dst, '-d', self.out, '-p', self.pch ]
             subprocess.check_call(command + [ "--verbose" ] if self.args.verbose else command, universal_newlines=True)
             command = [ 'diff', '-q', '-r', self.dst, self.out ]
+            subprocess.check_call(command, universal_newlines=True)
+            command = [ 'tar', 'cf', f'{self.src}.tar', os.path.relpath(self.src) ]
+            subprocess.check_call(command, universal_newlines=True)
+            command = [ 'tar', 'cf', f'{self.dst}.tar', os.path.relpath(self.dst) ]
+            subprocess.check_call(command, universal_newlines=True)
+            command = [ 'xdelta3', '-e', '-9', '-f', '-s', f'{self.src}.tar', f'{self.dst}.tar', 'tar-patch.xdelta3' ]
+            subprocess.check_call(command, universal_newlines=True)
+            command = [ 'du', self.pch, 'tar-patch.xdelta3', '-s' ]
             subprocess.check_call(command, universal_newlines=True)
         except:
             print("Failed")
