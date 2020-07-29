@@ -17,5 +17,3 @@ python3 delta-patcher.py generate -s $SRC -d $DST -p $PCH
 python3 delta-patcher.py apply -s $SRC -d $OUT -p $PCH
 python3 delta-patcher.py validate -s $DST -d $OUT -p $PCH
 diff -q -r $DST $OUT
-
-#rm -rf $OUT
