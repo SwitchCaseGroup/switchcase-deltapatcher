@@ -92,62 +92,66 @@ class PatchTool:
         with open(os.path.join(self.pch, 'manifest.json'), 'r') as inpfile:
             self.manifest = json.load(inpfile)
 
-        # look for files which needed to be added or patched
-        self.verbose(f'Adding/patching files...')
-        for dst_filename in self.manifest['dst']:
-            # check if destination already matches
-            dst_hash = self.generate_hash(os.path.join(self.dst, dst_filename))
-            if dst_hash == self.manifest['dst'][dst_filename]['sha256']:
-                self.verbose(f'Skipping already matching {dst_filename}')
-                continue;
-            # check if there is an exact file match in src directory
-            if dst_filename in self.manifest['src']:
-                src_hash = self.generate_hash(os.path.join(self.src, dst_filename))
-                if src_hash == self.manifest['src'][dst_filename]['sha256'] and src_hash == self.manifest['dst'][dst_filename]['sha256']:
-                    self.verbose(f'Copying {dst_filename}')
-                    self.copyfile(os.path.join(self.src, dst_filename), os.path.join(self.dst, dst_filename))
-                    continue
-            # check if there is an exact file match in patch directory
-            if dst_filename in self.manifest['pch']:
-                pch_hash = self.generate_hash(os.path.join(self.pch, dst_filename))
-                if pch_hash == self.manifest['pch'][dst_filename]['sha256'] and pch_hash == self.manifest['dst'][dst_filename]['sha256']:
-                    self.verbose(f'Copying {dst_filename}')
-                    self.copyfile(os.path.join(self.pch, dst_filename), os.path.join(self.dst, dst_filename))
-                    continue
-            # check if there's an expected patch source in src directory
-            if dst_filename in self.manifest['src'] and dst_hash == self.manifest['src'][dst_filename]['sha256']:
-                # validate the source hash matches manifest
-                if self.generate_hash(os.path.join(self.src, dst_filename)) != self.manifest['src'][dst_filename]['sha256']:
-                    self.error(f'Hash mismatch for {dst_filename}')
-                # validate the patch filename is specified
-                if 'xdelta3' not in self.manifest['dst'][dst_filename]:
-                    self.error(f'Delta file missing for {dst_filename}')
-                # apply xdelta3 patch
-                self.verbose(f'Patching {dst_filename}...')
-                self.apply_xdelta3(dst_filename)
-                continue
-            # check if there's an expected patch source in patch directory
-            pch_delta_filename = dst_filename + ".xdelta3"
-            pch_delta_hash = self.generate_hash(os.path.join(self.pch, pch_delta_filename))
-            if pch_delta_filename in self.manifest['pch'] and pch_delta_hash == self.manifest['pch'][pch_delta_filename]['sha256']:
-                # validate the source hash matches manifest
-                if self.generate_hash(os.path.join(self.pch, pch_delta_filename)) != self.manifest['pch'][pch_delta_filename]['sha256']:
-                    self.error(f'Hash mismatch for {dst_filename}')
-                # validate the patch filename is specified
-                if 'xdelta3' not in self.manifest['dst'][dst_filename]:
-                    self.error(f'Delta file missing for {dst_filename}')
-                # apply xdelta3 patch
-                self.verbose(f'Patching {dst_filename}...')
-                self.apply_xdelta3(dst_filename)
-                continue
-
-            self.error(f'Found no way to patch {dst_filename}')
-
         # remove any files not in the manifest
         for filename in self.dst_files:
             if filename not in self.manifest['dst']:
                 self.verbose(f'Removing {filename}...')
                 os.remove(os.path.join(self.dst, filename))
+
+        # look for files which needed to be added or patched
+        self.verbose(f'Adding/patching files...')
+        for dependents in [ True, False ]:
+            for dst_filename in self.manifest['dst']:
+                # first pass, don't overwrite files which have dependents (to support in-place patching)
+                if dependents and 'src' in self.manifest['dst'][dst_filename] and self.manifest['dst'][dst_filename]['src'] == dst_filename:
+                    continue
+                # check if destination already matches
+                dst_hash = self.generate_hash(os.path.join(self.dst, dst_filename))
+                if dst_hash == self.manifest['dst'][dst_filename]['sha256']:
+                    self.verbose(f'Skipping already matching {dst_filename}')
+                    continue;
+                # check if there is an exact file match in src directory
+                if dst_filename in self.manifest['src']:
+                    src_hash = self.generate_hash(os.path.join(self.src, dst_filename))
+                    if src_hash == self.manifest['src'][dst_filename]['sha256'] and src_hash == self.manifest['dst'][dst_filename]['sha256']:
+                        self.verbose(f'Copying {dst_filename}')
+                        self.copyfile(os.path.join(self.src, dst_filename), os.path.join(self.dst, dst_filename))
+                        continue
+                # check if there is an exact file match in patch directory
+                if dst_filename in self.manifest['pch']:
+                    pch_hash = self.generate_hash(os.path.join(self.pch, dst_filename))
+                    if pch_hash == self.manifest['pch'][dst_filename]['sha256'] and pch_hash == self.manifest['dst'][dst_filename]['sha256']:
+                        self.verbose(f'Copying {dst_filename}')
+                        self.copyfile(os.path.join(self.pch, dst_filename), os.path.join(self.dst, dst_filename))
+                        continue
+                # check if there's an expected patch source in src directory
+                if dst_filename in self.manifest['src'] and dst_hash == self.manifest['src'][dst_filename]['sha256']:
+                    # validate the source hash matches manifest
+                    if self.generate_hash(os.path.join(self.src, dst_filename)) != self.manifest['src'][dst_filename]['sha256']:
+                        self.error(f'Hash mismatch for {dst_filename}')
+                    # validate the patch filename is specified
+                    if 'xdelta3' not in self.manifest['dst'][dst_filename]:
+                        self.error(f'Delta file missing for {dst_filename}')
+                    # apply xdelta3 patch
+                    self.verbose(f'Patching {dst_filename}...')
+                    self.apply_xdelta3(dst_filename)
+                    continue
+                # check if there's an expected patch source in patch directory
+                pch_delta_filename = dst_filename + ".xdelta3"
+                pch_delta_hash = self.generate_hash(os.path.join(self.pch, pch_delta_filename))
+                if pch_delta_filename in self.manifest['pch'] and pch_delta_hash == self.manifest['pch'][pch_delta_filename]['sha256']:
+                    # validate the source hash matches manifest
+                    if self.generate_hash(os.path.join(self.pch, pch_delta_filename)) != self.manifest['pch'][pch_delta_filename]['sha256']:
+                        self.error(f'Hash mismatch for {dst_filename}')
+                    # validate the patch filename is specified
+                    if 'xdelta3' not in self.manifest['dst'][dst_filename]:
+                        self.error(f'Delta file missing for {dst_filename}')
+                    # apply xdelta3 patch
+                    self.verbose(f'Patching {dst_filename}...')
+                    self.apply_xdelta3(dst_filename)
+                    continue
+
+                self.error(f'Found no way to patch {dst_filename}')
 
         # remove any dirs not in the manifest
         for dir in [ os.path.relpath(filename, self.dst) for filename in self.find_dirs(self.dst) ]:

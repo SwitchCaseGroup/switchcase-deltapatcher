@@ -9,8 +9,8 @@ import subprocess, argparse, random, shutil, json, sys, re, os, io
 
 class PatchToolTest(PatchTool):
     # test configuration
-    target_size = 64*1024*1024
-    max_file_size = 8*500*1024
+    target_size = 8*1024*1024
+    max_file_size = 1*500*1024
     max_chunk_size = max_file_size / 1024
     changed_bytes = 0
 
@@ -43,25 +43,37 @@ class PatchToolTest(PatchTool):
         self.permute_dir(self.src, self.dst, self.src_files)
         # perform generate/apply/validate operations
         try:
+            # generate patch dir
             command = [ sys.executable, "patchtool.py", 'generate', '-s', self.src, '-d', self.dst, '-p', self.pch ]
             subprocess.check_call(command + [ "--verbose" ] if self.args.verbose else command, universal_newlines=True)
+            # apply patch into output folder
             command = [ sys.executable, "patchtool.py", 'apply', '-s', self.src, '-d', self.out, '-p', self.pch ]
             subprocess.check_call(command + [ "--verbose" ] if self.args.verbose else command, universal_newlines=True)
+            # validate output folder
             command = [ sys.executable, "patchtool.py", 'validate', '-s', self.dst, '-d', self.out, '-p', self.pch ]
             subprocess.check_call(command + [ "--verbose" ] if self.args.verbose else command, universal_newlines=True)
+            # diff dst vs out to validate the validation
             command = [ 'diff', '-q', '-r', self.dst, self.out ]
             subprocess.check_call(command, universal_newlines=True)
+            # tar the src and dst, generate xdelta3 patch for comparison
             command = [ 'tar', 'cf', f'{self.src}.tar', os.path.relpath(self.src) ]
             subprocess.check_call(command, universal_newlines=True)
             command = [ 'tar', 'cf', f'{self.dst}.tar', os.path.relpath(self.dst) ]
             subprocess.check_call(command, universal_newlines=True)
             command = [ 'xdelta3', '-e', '-9', '-f', '-s', f'{self.src}.tar', f'{self.dst}.tar', 'tar-patch.xdelta3' ]
             subprocess.check_call(command, universal_newlines=True)
+            # display summary of results
             print(str(int(self.changed_bytes / 1024)).ljust(8) + "modified/added")
             command = [ 'du', self.src, self.dst, self.pch, 'tar-patch.xdelta3', '-s' ]
             subprocess.check_call(command, universal_newlines=True)
             command = [ 'rm', f'{self.src}.tar', f'{self.dst}.tar', 'tar-patch.xdelta3' ]
             subprocess.check_call(command, universal_newlines=True)
+            # apply patch in-place on src directory
+            command = [ sys.executable, "patchtool.py", 'apply', '-s', self.src, '-d', self.src, '-p', self.pch ]
+            subprocess.check_call(command + [ "--verbose" ] if self.args.verbose else command, universal_newlines=True)
+            # validate in-place results on src directory
+            command = [ sys.executable, "patchtool.py", 'validate', '-s', self.dst, '-d', self.src, '-p', self.pch ]
+            subprocess.check_call(command + [ "--verbose" ] if self.args.verbose else command, universal_newlines=True)
         except:
             print("Failed")
             exit(1)
@@ -140,6 +152,8 @@ class PatchToolTest(PatchTool):
         os.rename(dst_filename, f'{dst_filename}.uasset')
         # read the raw data for this file
         size = os.path.getsize(parts[0])
+        if size < len(parts):
+            return
         blocks = []
         with open(parts[0], 'rb') as inpfile:
             chunk_size = int(size / len(parts))
