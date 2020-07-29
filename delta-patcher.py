@@ -10,8 +10,8 @@ class DeltaPatcher:
     commands = [ "generate", "apply", "validate", "test" ]
 
     # test configuration
-    target_size = 8*1024*1024
-    max_file_size = 500*1024
+    target_size = 64*1024*1024
+    max_file_size = 8*500*1024
     max_chunk_size = max_file_size / 1024
 
     # note that modify and split can both be applied to the same source file
@@ -69,13 +69,13 @@ class DeltaPatcher:
         self.verbose(f'Creating deltas for modified files...')
         for (src_regex, dst_regex) in [ pattern.split(':') for pattern in self.pat ]:
             compiled = re.compile(src_regex)
-            for src_match in filter(None, [ compiled.match(src_filename) for src_filename in self.src_files]):
+            for src_match in filter(None, [ compiled.fullmatch(src_filename) for src_filename in self.src_files]):
                 # if the regex pattern matched, find all destination matches
                 self.verbose(f'Matched source "{src_regex}" => {src_match[0]}')
                 # replace destination pattern {N} variables with results from source regex
                 dst_regex_new = dst_regex
                 for group in range(compiled.groups):
-                    dst_regex_new = dst_regex_new.replace('{' + str(group) + '}', src_match[group+1])
+                    dst_regex_new = dst_regex_new.replace('{' + str(group) + '}', re.escape(src_match[group+1]))
                 # handle destination file regex matches
                 self.match_dst(src_match[0], dst_regex_new);
 
@@ -291,7 +291,7 @@ class DeltaPatcher:
     def match_dst(self, src_filename, dst_regex):
         compiled = re.compile(dst_regex)
         # iterate through our regex destination pattern, matching against all destination files
-        for dst_match in filter(None, [ compiled.match(dst_filename) for dst_filename in self.dst_files]):
+        for dst_match in filter(None, [ compiled.fullmatch(dst_filename) for dst_filename in self.dst_files]):
             dst_filename = dst_match[0]
             # skip if we already have an earlier match
             if 'src' in self.manifest['dst'][dst_filename]:
