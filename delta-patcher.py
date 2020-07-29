@@ -49,7 +49,7 @@ class DeltaPatcher:
 
         # add manifest entry for each destination file and hash its file contents
         print(f'Generating sha256 hashes for destination files...')
-        self.generate_hashes(["dst"])
+        self.generate_hashes(["src", "dst"])
 
         # search for modified files and generate xdelta3 patches for them
         print(f'Creating deltas for modified files...')
@@ -85,26 +85,19 @@ class DeltaPatcher:
         # iterate through our regex destination pattern, matching against all destination files
         for dst_match in filter(None, [ compiled.match(dst_filename) for dst_filename in self.dst_files]):
             dst_filename = dst_match[0]
-            dst = self.manifest['dst'].get(dst_filename)
             # skip if we already have an earlier match
-            if 'src' in dst:
+            if 'src' in self.manifest['dst'][dst_filename]:
                 print(f'Skipping duplicate match {dst_regex} => {dst_filename}')
                 continue
 
-            # if the regex pattern matched, 
+            # if the regex pattern matched, check if it requires an xdelta3 patch
             print(f'Matched destination {compiled} => {dst_filename}')
-            dst['src'] = src_filename
-
-            # hash the src if not already done
-            if src_filename not in self.manifest['src']:
-                self.manifest['src'][src_filename] = {
-                    'sha256': self.generate_hash(os.path.join(self.src, src_filename))
-                }
+            self.manifest['dst'][dst_filename]['src'] = src_filename
 
             # generate xdelta3 if the files don't already match
-            if self.manifest['src'][src_filename]['sha256'] != dst['sha256']:
+            if self.manifest['src'][src_filename]['sha256'] != self.manifest['dst'][dst_filename]['sha256']:
                 print(f'Creating delta for {dst_filename}...')
-                self.generate_xdelta3(dst, src_filename, dst_filename)
+                self.generate_xdelta3(self.manifest['dst'][dst_filename], src_filename, dst_filename)
 
     def apply(self):
         # read the manifest file
@@ -123,29 +116,37 @@ class DeltaPatcher:
             if dst_hash == self.manifest['dst'][dst_filename]['sha256']:
                 print(f'Skipping already matching {dst_filename}')
                 continue;
-            elif dst_filename in self.manifest['src'] and dst_hash == self.manifest['src'][dst_filename]['sha256']:
-                # look for source file matching the expected hash
-                if self.generate_hash(os.path.join(self.src, dst_filename)) == self.manifest['src'][dst_filename]['sha256']:
-                    # look for xdelta3 filename
-                    if 'xdelta3' in self.manifest['dst'][dst_filename]:
-                        print(f'Patching {dst_filename}...')
-                        self.apply_xdelta3(dst_filename)
-                else:
-                    self.error(f'Missing {dst_filename} 1')
-            elif pch_delta_filename in self.manifest['pch'] and pch_delta_hash == self.manifest['pch'][pch_delta_filename]['sha256']:
-                # look for source file matching the expected hash
-                if self.generate_hash(os.path.join(self.pch, pch_delta_filename)) == self.manifest['pch'][pch_delta_filename]['sha256']:
-                    # look for xdelta3 filename
-                    if 'xdelta3' in self.manifest['dst'][dst_filename]:
-                        print(f'Patching {dst_filename}...')
-                        self.apply_xdelta3(dst_filename)
-                else:
-                    self.error(f'Missing {dst_filename} 1')
-            elif dst_filename in self.manifest['pch'] and pch_hash == self.manifest['pch'][dst_filename]['sha256']:
+            # check if there's an expected patch source in src directory
+            if dst_filename in self.manifest['src'] and dst_hash == self.manifest['src'][dst_filename]['sha256']:
+                # validate the source hash matches manifest
+                if self.generate_hash(os.path.join(self.src, dst_filename)) != self.manifest['src'][dst_filename]['sha256']:
+                    self.error(f'Hash mismatch for {dst_filename}')
+                # validate the patch filename is specified
+                if 'xdelta3' not in self.manifest['dst'][dst_filename]:
+                    self.error(f'Delta file missing for {dst_filename}')
+                # apply xdelta3 patch
+                print(f'Patching {dst_filename}...')
+                self.apply_xdelta3(dst_filename)
+                continue
+            # check if there's an expected patch source in patch directory
+            if pch_delta_filename in self.manifest['pch'] and pch_delta_hash == self.manifest['pch'][pch_delta_filename]['sha256']:
+                # validate the source hash matches manifest
+                if self.generate_hash(os.path.join(self.pch, pch_delta_filename)) != self.manifest['pch'][pch_delta_filename]['sha256']:
+                    self.error(f'Hash mismatch for {dst_filename}')
+                # validate the patch filename is specified
+                if 'xdelta3' not in self.manifest['dst'][dst_filename]:
+                    self.error(f'Delta file missing for {dst_filename}')
+                # apply xdelta3 patch
+                print(f'Patching {dst_filename}...')
+                self.apply_xdelta3(dst_filename)
+                continue
+            # check if there is an exact file match in patch directory
+            if dst_filename in self.manifest['pch'] and pch_hash == self.manifest['pch'][dst_filename]['sha256']:
                 print(f'Copying {dst_filename}')
                 self.copyfile(os.path.join(self.pch, dst_filename), os.path.join(self.dst, dst_filename))
-            else:
-                self.error(f'Missing {dst_filename} 2')
+                continue
+
+            self.error(f'Found no way to patch {dst_filename}')
 
         # remove any files not in the manifest
         for filename in self.dst_files:
@@ -164,7 +165,7 @@ class DeltaPatcher:
         for dir in dirs:
             for filename in getattr(self, f'{dir}_files'):
                 self.manifest[dir][filename] = {
-                    'sha256': self.generate_hash(os.path.join(self.dst, filename))
+                    'sha256': self.generate_hash(os.path.join(getattr(self, dir), filename))
                 }
 
     def generate_hash(self, path):
