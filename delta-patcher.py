@@ -13,9 +13,12 @@ class DeltaPatcher:
     target_size = 8*1024*1024
     max_file_size = 500*1024
     max_chunk_size = max_file_size / 1024
-    chance_modify = (0, 10)
-    chance_add = (10, 20)
-    chance_remove = (20, 30)
+
+    # note that modify and split can both be applied to the same source file
+    chance_remove = (0, 10)
+    chance_modify = (10, 25)
+    chance_split = (20, 30)
+    chance_add = (30, 40)
 
     def __init__(self):
         # parse command-line arguments and execute the command
@@ -221,6 +224,9 @@ class DeltaPatcher:
                 # randomly modify the file
                 if choice >= self.chance_modify[0] and choice < self.chance_modify[1]:
                     self.permute_file(dst_filename)
+                # randomly split the file
+                if choice >= self.chance_split[0] and choice < self.chance_split[1]:
+                    self.split_file(filename)
         # randomly add new files
         self.generate_random(self.dst, int(self.target_size * (self.chance_add[1] - self.chance_add[0]) / 100))
 
@@ -234,20 +240,42 @@ class DeltaPatcher:
                 chunk_size = random.randint(1, min(self.max_chunk_size, size))
                 block = inpfile.read(chunk_size)
                 choice = random.randint(0, 99)
-                # randomly modify the chunk
-                if choice >= self.chance_modify[0] and choice < self.chance_modify[1]:
-                    block = os.urandom(len(block))
-                # randomly copy the chunk
-                if choice >= self.chance_add[0] and choice < self.chance_add[1]:
-                    blocks.append(block)
-                # randomly remove the chunk
+                # randomly skip ("remove") the chunk
                 if choice < self.chance_remove[0] or choice >= self.chance_remove[1]:
+                    # randomly modify the chunk
+                    if choice >= self.chance_modify[0] and choice < self.chance_modify[1]:
+                        block = os.urandom(len(block))
+                    # randomly add new chunks
+                    if choice >= self.chance_add[0] and choice < self.chance_add[1]:
+                        blocks.append(os.urandom(len(block)))
+                    # copy block
                     blocks.append(block)
                 size -= chunk_size
         # write the blocks back to the file
         with open(filename, 'wb') as outfile:
             for block in blocks:
                 outfile.write(block)
+
+    def split_file(self, filename):
+        # pull data chunks out of destination file into separate files
+        src_filename = os.path.join(self.src, filename)
+        dst_filename = os.path.join(self.dst, filename)
+        parts = [ f'{dst_filename}.uasset', f'{dst_filename}.uexp', f'{dst_filename}.ubulk' ]
+        # rename source and destination so they are detected by patcher as split files
+        os.rename(src_filename, f'{src_filename}.uasset')
+        os.rename(dst_filename, f'{dst_filename}.uasset')
+        # read the raw data for this file
+        size = os.path.getsize(parts[0])
+        blocks = []
+        with open(parts[0], 'rb') as inpfile:
+            chunk_size = int(size / len(parts))
+            for part in parts:
+                block = inpfile.read(chunk_size)
+                blocks.append(block)
+        # write file parts
+        for (i, filename) in enumerate(parts):
+            with open(filename, 'wb') as outfile:
+                outfile.write(blocks[i])
 
     def cleanup(self):
         shutil.rmtree(self.src, ignore_errors=True)
