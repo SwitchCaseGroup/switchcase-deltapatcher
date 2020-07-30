@@ -85,12 +85,11 @@ class PatchToolTest(PatchTool):
 
             self.execute([ sys.executable, "patchtool.py", 'validate', '-s', self.dst, '-d', self.src, '-p', self.pch ])
             self.execute([ 'diff', '-q', '-r', self.dst, self.src ])
-           
+            print("Tests Passed.")
 
         except Exception as e:
-            print("Failed")
-            self.trace(e)
-            exit(1)
+            print("Test Failed:")
+            self.error(e)
 
         # remove test data
         self.cleanup()

@@ -274,8 +274,6 @@ class PatchTool:
             if dst_filename not in self.src_files:
                 self.error(f'{dst_filename}: missing from {self.src}')
 
-        print('Validation complete: OK')
-
     def atomic_replace(self, src, dst):
         tmp = f'{dst}.tmp'
         os.makedirs(os.path.dirname(dst), exist_ok=True)
