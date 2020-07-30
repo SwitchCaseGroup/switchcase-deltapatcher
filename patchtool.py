@@ -73,7 +73,7 @@ class PatchTool:
         for dst_filename in [dst_filename for dst_filename in self.manifest['dst'] if 'src' not in self.manifest['dst'][dst_filename]]:
             self.verbose(f'Copying {dst_filename}...')
             pch_filename = os.path.join(self.pch, dst_filename)
-            self.copyfile(os.path.join(self.dst, dst_filename), pch_filename)
+            self.atomic_replace(os.path.join(self.dst, dst_filename), pch_filename)
 
         # generate pch hashes
         self.pch_files = [ os.path.relpath(filename, self.pch) for filename in self.find_files(self.pch) ]
@@ -146,14 +146,14 @@ class PatchTool:
                     src_hash = self.generate_hash(os.path.join(self.src, dst_filename))
                     if src_hash == self.manifest['src'][dst_filename]['sha256'] and src_hash == self.manifest['dst'][dst_filename]['sha256']:
                         self.verbose(f'Copying {dst_filename}')
-                        self.copyfile(os.path.join(self.src, dst_filename), os.path.join(self.dst, dst_filename))
+                        self.atomic_replace(os.path.join(self.src, dst_filename), os.path.join(self.dst, dst_filename))
                         continue
                 # check if there is an exact file match in patch directory
                 if dst_filename in self.manifest['pch']:
                     pch_hash = self.generate_hash(os.path.join(self.pch, dst_filename))
                     if pch_hash == self.manifest['pch'][dst_filename]['sha256'] and pch_hash == self.manifest['dst'][dst_filename]['sha256']:
                         self.verbose(f'Copying {dst_filename}')
-                        self.copyfile(os.path.join(self.pch, dst_filename), os.path.join(self.dst, dst_filename))
+                        self.atomic_replace(os.path.join(self.pch, dst_filename), os.path.join(self.dst, dst_filename))
                         continue
                 # check if there's an expected patch source in src directory
                 if dst_filename in self.manifest['src'] and dst_hash == self.manifest['src'][dst_filename]['sha256']:
@@ -230,14 +230,19 @@ class PatchTool:
         pch_filename = os.path.join(self.pch, self.manifest['dst'][dst_filename]['xdelta3'])
         src_filename = os.path.join(self.src, self.manifest['dst'][dst_filename]['src'])
         out_filename = os.path.join(self.dst, dst_filename)
-        # apply xdelta3 patch
+        tmp_filename = f'{out_filename}.patched'
+        # apply xdelta3 patch to temporary file
         os.makedirs(os.path.dirname(out_filename), exist_ok=True)
         command = [
             "xdelta3", "-d", "-f",
-            "-s", src_filename, pch_filename, os.path.join(self.dst, dst_filename)
+            "-s", src_filename, pch_filename, tmp_filename
         ]
         self.verbose(' '.join(command))
         subprocess.check_output(command, universal_newlines=True)
+        # perform atomic file copy/replace
+        self.atomic_replace(tmp_filename, out_filename)
+        # remove temporary file
+        os.remove(tmp_filename)
 
     def validate(self):
         self.verbose(f'Generating hashes...')
@@ -257,7 +262,7 @@ class PatchTool:
 
         print('Validation complete: OK')
 
-    def copyfile(self, src, dst):
+    def atomic_replace(self, src, dst):
         tmp = f'{dst}.tmp'
         os.makedirs(os.path.dirname(dst), exist_ok=True)
         # perform atomic file copy/replace
