@@ -20,16 +20,10 @@ class PatchToolTest(PatchTool):
     chance_split = (20, 60)
     chance_add = (60, 70)
 
-    def __init__(self):
-        sys.argv = [ sys.argv[0], "test" ]
-        super().__init__()
-        self.test()
-
-    def test(self):
+    def __init__(self, verbose):
+        super().__init__('src', 'dst', 'pch', 'out', [ 'uasset', 'umap' ], verbose=verbose)
         # repeatability
         random.seed(0)
-        # prepare test output directory
-        self.out = os.path.abspath(self.args.out)
         # configure test directories
         self.cleanup()
         # initialize state
@@ -45,37 +39,49 @@ class PatchToolTest(PatchTool):
         try:
             # generate patch dir
             command = [ sys.executable, "patchtool.py", 'generate', '-s', self.src, '-d', self.dst, '-p', self.pch ]
-            subprocess.check_call(command + [ "--verbose" ] if self.args.verbose else command, universal_newlines=True)
+            self.trace(command)
+            subprocess.check_call(command + [ "--verbose" ] if self.verbose else command, universal_newlines=True)
             # apply patch into output folder
             command = [ sys.executable, "patchtool.py", 'apply', '-s', self.src, '-d', self.out, '-p', self.pch ]
-            subprocess.check_call(command + [ "--verbose" ] if self.args.verbose else command, universal_newlines=True)
+            self.trace(command)
+            subprocess.check_call(command + [ "--verbose" ] if self.verbose else command, universal_newlines=True)
             # validate output folder
             command = [ sys.executable, "patchtool.py", 'validate', '-s', self.dst, '-d', self.out, '-p', self.pch ]
-            subprocess.check_call(command + [ "--verbose" ] if self.args.verbose else command, universal_newlines=True)
+            self.trace(command)
+            subprocess.check_call(command + [ "--verbose" ] if self.verbose else command, universal_newlines=True)
             # diff dst vs out to validate the validation
             command = [ 'diff', '-q', '-r', self.dst, self.out ]
+            self.trace(command)
             subprocess.check_call(command, universal_newlines=True)
             # tar the src and dst, generate xdelta3 patch for comparison
             command = [ 'tar', 'cf', f'{self.src}.tar', os.path.relpath(self.src) ]
+            self.trace(command)
             subprocess.check_call(command, universal_newlines=True)
             command = [ 'tar', 'cf', f'{self.dst}.tar', os.path.relpath(self.dst) ]
+            self.trace(command)
             subprocess.check_call(command, universal_newlines=True)
             command = [ 'xdelta3', '-e', '-9', '-f', '-s', f'{self.src}.tar', f'{self.dst}.tar', 'tar-patch.xdelta3' ]
+            self.trace(command)
             subprocess.check_call(command, universal_newlines=True)
             # display summary of results
             print(str(int(self.changed_bytes / 1024)).ljust(8) + "modified/added")
             command = [ 'du', self.src, self.dst, self.pch, 'tar-patch.xdelta3', '-s' ]
+            self.trace(command)
             subprocess.check_call(command, universal_newlines=True)
             command = [ 'rm', f'{self.src}.tar', f'{self.dst}.tar', 'tar-patch.xdelta3' ]
+            self.trace(command)
             subprocess.check_call(command, universal_newlines=True)
             # apply patch in-place on src directory
             command = [ sys.executable, "patchtool.py", 'apply', '-s', self.src, '-d', self.src, '-p', self.pch ]
-            subprocess.check_call(command + [ "--verbose" ] if self.args.verbose else command, universal_newlines=True)
+            self.trace(command)
+            subprocess.check_call(command + [ "--verbose" ] if self.verbose else command, universal_newlines=True)
             # validate in-place results on src directory
             command = [ sys.executable, "patchtool.py", 'validate', '-s', self.dst, '-d', self.src, '-p', self.pch ]
-            subprocess.check_call(command + [ "--verbose" ] if self.args.verbose else command, universal_newlines=True)
+            self.trace(command)
+            subprocess.check_call(command + [ "--verbose" ] if self.verbose else command, universal_newlines=True)
             # diff dst vs src to validate the validation
             command = [ 'diff', '-q', '-r', self.dst, self.src ]
+            self.trace(command)
             subprocess.check_call(command, universal_newlines=True)
         except:
             print("Failed")
@@ -180,4 +186,9 @@ class PatchToolTest(PatchTool):
         return str(id)
  
 if __name__ == "__main__":
-    patch_tool_test = PatchToolTest()
+    # parse command-line arguments and execute the command
+    arg_parser = argparse.ArgumentParser(description='Binary delta patching tool.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    arg_parser.add_argument('-v', '--verbose', dest='verbose', action="store_true", help='increase verbosity')
+    args = arg_parser.parse_args()
+    patch_tool_test = PatchToolTest(args.verbose)
+ 
