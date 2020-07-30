@@ -10,7 +10,7 @@ import subprocess, argparse, random, shutil, json, sys, re, os, io
 class PatchToolTest(PatchTool):
     # test configuration
     target_size = 8*1024*1024
-    max_file_size = 1*500*1024
+    max_file_size = 500*1024
     max_chunk_size = max_file_size / 1024
     changed_bytes = 0
 

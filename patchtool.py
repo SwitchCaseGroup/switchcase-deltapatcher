@@ -5,6 +5,23 @@
 
 import subprocess, argparse, hashlib, shutil, json, sys, re, os, io
 
+usage = f'''
+
+Example to generate patch directory, apply it and then validate:
+  python3 patchtool.py generate -s src_dir -d dst_dir -p patch_dir
+  python3 patchtool.py apply -s src_dir -d out_dir -p patch_dir
+  python3 patchtool.py validate -s dst_dir -d out_dir -p patch_dir
+
+Patching can also be done in-place, over top of the source directory:
+  python3 patchtool.py generate -s src_dir -d dst_dir -p patch_dir
+  python3 patchtool.py apply -s src_dir -d src_dir -p patch_dir
+  python3 patchtool.py validate -s dst_dir -d src_dir -p patch_dir
+
+Patch apply uses atomic file operations. If the process is interrupted,
+the apply command can be run again to resume patching.
+
+'''
+
 class PatchTool:
 
     def __init__(self, src, dst, pch, out, split, verbose):
@@ -194,6 +211,8 @@ class PatchTool:
 
     def generate_hashes(self, manifest, dirs):
         for dir in dirs:
+            if dir not in manifest:
+                manifest[dir] = { }
             for filename in getattr(self, f'{dir}_files'):
                 manifest[dir][filename] = {
                     'sha256': self.generate_hash(os.path.join(getattr(self, dir), filename))
@@ -231,15 +250,24 @@ class PatchTool:
         os.remove(tmp_filename)
 
     def validate(self):
+        # read the manifest file
+        self.trace(f'Reading manifest...')
+        with open(os.path.join(self.pch, 'manifest.json'), 'r') as inpfile:
+            self.manifest = json.load(inpfile)
+
+        # generate local hashes
         self.trace(f'Generating hashes...')
-        self.generate_hashes(self.manifest, ['src', 'dst'])
+        local_manifest = {}
+        self.generate_hashes(local_manifest, ['src', 'dst'])
 
         # validate all src files exist in dst and hashes match
         for src_filename in self.src_files:
             if src_filename not in self.dst_files:
                 self.error(f'{src_filename}: missing from {self.dst}')
-            elif self.manifest['src'][src_filename]['sha256'] != self.manifest['dst'][src_filename]['sha256']:
-                self.error(f'{src_filename}: sha256 mismatch!')
+            elif local_manifest['src'][src_filename]['sha256'] != local_manifest['dst'][src_filename]['sha256']:
+                self.error(f'{src_filename}: src/dst sha256 mismatch!')
+            elif local_manifest['src'][src_filename]['sha256'] != self.manifest['dst'][src_filename]['sha256']:
+                self.error(f'{src_filename}: manifest sha256 mismatch!')
 
         # validate all dst files exist in src
         for dst_filename in self.dst_files:
@@ -274,7 +302,7 @@ if __name__ == "__main__":
     # currently supported CLI commands
     commands = [ "generate", "apply", "validate" ]
     # parse command-line arguments and execute the command
-    arg_parser = argparse.ArgumentParser(description='Binary delta patching tool.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    arg_parser = argparse.ArgumentParser(description='Binary delta patching tool.', usage=usage, formatter_class=argparse.RawTextHelpFormatter)
     arg_parser.add_argument('command', nargs='?', choices=commands, default="generate", help='command')
     arg_parser.add_argument('-s', '--src', dest='src', required=True, help='source directory')
     arg_parser.add_argument('-d', '--dst', dest='dst', required=True, help='destination directory')
