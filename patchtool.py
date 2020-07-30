@@ -52,7 +52,7 @@ class PatchTool:
 
         # add manifest entry for each destination file and hash its file contents
         self.verbose(f'Generating sha256 hashes for destination files...')
-        self.generate_hashes(["src", "dst"])
+        self.generate_hashes(self.manifest, ["src", "dst"])
 
         # search for modified files and generate xdelta3 patches for them
         self.verbose(f'Creating deltas for modified files...')
@@ -66,7 +66,7 @@ class PatchTool:
                 for group in range(compiled.groups):
                     dst_regex_new = dst_regex_new.replace('{' + str(group) + '}', re.escape(src_match[group+1]))
                 # handle destination file regex matches
-                self.match_dst(src_match[0], dst_regex_new);
+                self.generate_deltas(src_match[0], dst_regex_new);
 
         # handle added files by copying over the destination file directly
         self.verbose(f'Copying added files...')
@@ -74,9 +74,10 @@ class PatchTool:
             self.verbose(f'Copying {dst_filename}...')
             pch_filename = os.path.join(self.pch, dst_filename)
             self.copyfile(os.path.join(self.dst, dst_filename), pch_filename)
-            self.manifest['pch'][os.path.relpath(pch_filename, self.pch)] = {
-                'sha256': self.generate_hash(pch_filename)
-            }
+
+        # generate pch hashes
+        self.pch_files = [ os.path.relpath(filename, self.pch) for filename in self.find_files(self.pch) ]
+        self.generate_hashes(self.manifest, ['pch'])
 
         # generate dir list
         self.manifest['dir'] = [ os.path.relpath(filename, self.dst) for filename in self.find_dirs(self.dst) ]
@@ -85,6 +86,36 @@ class PatchTool:
         self.verbose(f'Writing manifest...')
         with open(os.path.join(self.pch, 'manifest.json'), 'w') as outfile:
             json.dump(self.manifest, outfile, indent=4)
+
+    def generate_deltas(self, src_filename, dst_regex):
+        compiled = re.compile(dst_regex)
+        # iterate through our regex destination pattern, matching against all destination files
+        for dst_match in filter(None, [ compiled.fullmatch(dst_filename) for dst_filename in self.dst_files]):
+            dst_filename = dst_match[0]
+            # skip if we already have an earlier match
+            if 'src' in self.manifest['dst'][dst_filename]:
+                self.verbose(f'Skipping duplicate match {dst_regex} => {dst_filename}')
+                continue
+
+            # if the regex pattern matched, check if it requires an xdelta3 patch
+            self.verbose(f'Matched destination {compiled} => {dst_filename}')
+            self.manifest['dst'][dst_filename]['src'] = src_filename
+
+            # generate xdelta3 if the files don't already match
+            if self.manifest['src'][src_filename]['sha256'] != self.manifest['dst'][dst_filename]['sha256']:
+                self.verbose(f'Creating delta for {dst_filename}...')
+                self.generate_xdelta3(self.manifest['dst'][dst_filename], src_filename, dst_filename)
+
+    def generate_xdelta3(self, dst, src_filename, dst_filename):
+        pch_filename = os.path.join(self.pch, dst_filename + ".xdelta3")
+        os.makedirs(os.path.dirname(pch_filename), exist_ok=True)
+        command = [
+            "xdelta3", "-e", "-9", "-f",
+            "-s", os.path.join(self.src, src_filename), os.path.join(self.dst, dst_filename), pch_filename
+        ]
+        self.verbose(' '.join(command))
+        subprocess.check_output(command, universal_newlines=True)
+        dst['xdelta3'] = os.path.relpath(pch_filename, self.pch)
 
     def apply(self):
         # read the manifest file
@@ -162,25 +193,6 @@ class PatchTool:
     def test(self):
         pass
 
-    def match_dst(self, src_filename, dst_regex):
-        compiled = re.compile(dst_regex)
-        # iterate through our regex destination pattern, matching against all destination files
-        for dst_match in filter(None, [ compiled.fullmatch(dst_filename) for dst_filename in self.dst_files]):
-            dst_filename = dst_match[0]
-            # skip if we already have an earlier match
-            if 'src' in self.manifest['dst'][dst_filename]:
-                self.verbose(f'Skipping duplicate match {dst_regex} => {dst_filename}')
-                continue
-
-            # if the regex pattern matched, check if it requires an xdelta3 patch
-            self.verbose(f'Matched destination {compiled} => {dst_filename}')
-            self.manifest['dst'][dst_filename]['src'] = src_filename
-
-            # generate xdelta3 if the files don't already match
-            if self.manifest['src'][src_filename]['sha256'] != self.manifest['dst'][dst_filename]['sha256']:
-                self.verbose(f'Creating delta for {dst_filename}...')
-                self.generate_xdelta3(self.manifest['dst'][dst_filename], src_filename, dst_filename)
-
     def find_files(self, path):
         if not os.path.isfile(path):
             for current in os.listdir(path):
@@ -194,10 +206,10 @@ class PatchTool:
             for current in os.listdir(path):
                 yield from self.find_dirs(os.path.join(path, current))
 
-    def generate_hashes(self, dirs):
+    def generate_hashes(self, manifest, dirs):
         for dir in dirs:
             for filename in getattr(self, f'{dir}_files'):
-                self.manifest[dir][filename] = {
+                manifest[dir][filename] = {
                     'sha256': self.generate_hash(os.path.join(getattr(self, dir), filename))
                 }
 
@@ -214,20 +226,6 @@ class PatchTool:
             pass
         return hash.hexdigest()
 
-    def generate_xdelta3(self, dst, src_filename, dst_filename):
-        pch_filename = os.path.join(self.pch, dst_filename + ".xdelta3")
-        os.makedirs(os.path.dirname(pch_filename), exist_ok=True)
-        command = [
-            "xdelta3", "-e", "-9", "-f",
-            "-s", os.path.join(self.src, src_filename), os.path.join(self.dst, dst_filename), pch_filename
-        ]
-        self.verbose(' '.join(command))
-        subprocess.check_output(command, universal_newlines=True)
-        dst['xdelta3'] = os.path.relpath(pch_filename, self.pch)
-        self.manifest['pch'][dst['xdelta3']] = {
-            'sha256': self.generate_hash(pch_filename)
-        }
-
     def apply_xdelta3(self, dst_filename):
         pch_filename = os.path.join(self.pch, self.manifest['dst'][dst_filename]['xdelta3'])
         src_filename = os.path.join(self.src, self.manifest['dst'][dst_filename]['src'])
@@ -243,7 +241,7 @@ class PatchTool:
 
     def validate(self):
         self.verbose(f'Generating hashes...')
-        self.generate_hashes(['src', 'dst'])
+        self.generate_hashes(self.manifest, ['src', 'dst'])
 
         # validate all src files exist in dst and hashes match
         for src_filename in self.src_files:
