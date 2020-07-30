@@ -273,7 +273,6 @@ class PatchTool:
 if __name__ == "__main__":
     # currently supported CLI commands
     commands = [ "generate", "apply", "validate" ]
-
     # parse command-line arguments and execute the command
     arg_parser = argparse.ArgumentParser(description='Binary delta patching tool.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     arg_parser.add_argument('command', nargs='?', choices=commands, default="generate", help='command')

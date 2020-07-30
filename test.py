@@ -37,57 +37,67 @@ class PatchToolTest(PatchTool):
         self.permute_dir(self.src, self.dst, self.src_files)
         # perform generate/apply/validate operations
         try:
-            # generate patch dir
-            command = [ sys.executable, "patchtool.py", 'generate', '-s', self.src, '-d', self.dst, '-p', self.pch ]
-            self.trace(command)
-            subprocess.check_call(command + [ "--verbose" ] if self.verbose else command, universal_newlines=True)
-            # apply patch into output folder
-            command = [ sys.executable, "patchtool.py", 'apply', '-s', self.src, '-d', self.out, '-p', self.pch ]
-            self.trace(command)
-            subprocess.check_call(command + [ "--verbose" ] if self.verbose else command, universal_newlines=True)
-            # validate output folder
-            command = [ sys.executable, "patchtool.py", 'validate', '-s', self.dst, '-d', self.out, '-p', self.pch ]
-            self.trace(command)
-            subprocess.check_call(command + [ "--verbose" ] if self.verbose else command, universal_newlines=True)
-            # diff dst vs out to validate the validation
-            command = [ 'diff', '-q', '-r', self.dst, self.out ]
-            self.trace(command)
-            subprocess.check_call(command, universal_newlines=True)
-            # tar the src and dst, generate xdelta3 patch for comparison
-            command = [ 'tar', 'cf', f'{self.src}.tar', os.path.relpath(self.src) ]
-            self.trace(command)
-            subprocess.check_call(command, universal_newlines=True)
-            command = [ 'tar', 'cf', f'{self.dst}.tar', os.path.relpath(self.dst) ]
-            self.trace(command)
-            subprocess.check_call(command, universal_newlines=True)
-            command = [ 'xdelta3', '-e', '-9', '-f', '-s', f'{self.src}.tar', f'{self.dst}.tar', 'tar-patch.xdelta3' ]
-            self.trace(command)
-            subprocess.check_call(command, universal_newlines=True)
-            # display summary of results
+            #
+            # Patch generate, apply and validate on separate src/dst/out directories
+            #
+
+            self.execute([ sys.executable, "patchtool.py", 'generate', '-s', self.src, '-d', self.dst, '-p', self.pch ], self.verbose)
+            self.execute([ sys.executable, "patchtool.py", 'apply', '-s', self.src, '-d', self.out, '-p', self.pch ], self.verbose)
+            self.execute([ sys.executable, "patchtool.py", 'validate', '-s', self.dst, '-d', self.out, '-p', self.pch ], self.verbose)
+            self.execute([ 'diff', '-q', '-r', self.dst, self.out ])
+            self.execute([ 'tar', 'cf', f'{self.src}.tar', os.path.relpath(self.src) ])
+            self.execute([ 'tar', 'cf', f'{self.dst}.tar', os.path.relpath(self.dst) ])
+            self.execute([ 'xdelta3', '-e', '-9', '-f', '-s', f'{self.src}.tar', f'{self.dst}.tar', 'tar-patch.xdelta3' ])
+            self.execute([ 'du', self.src, self.dst, self.pch, 'tar-patch.xdelta3', '-s' ])
+            self.execute([ 'rm', f'{self.src}.tar', f'{self.dst}.tar', 'tar-patch.xdelta3' ])
+
             print(str(int(self.changed_bytes / 1024)).ljust(8) + "modified/added")
-            command = [ 'du', self.src, self.dst, self.pch, 'tar-patch.xdelta3', '-s' ]
-            self.trace(command)
-            subprocess.check_call(command, universal_newlines=True)
-            command = [ 'rm', f'{self.src}.tar', f'{self.dst}.tar', 'tar-patch.xdelta3' ]
-            self.trace(command)
-            subprocess.check_call(command, universal_newlines=True)
-            # apply patch in-place on src directory
-            command = [ sys.executable, "patchtool.py", 'apply', '-s', self.src, '-d', self.src, '-p', self.pch ]
-            self.trace(command)
-            subprocess.check_call(command + [ "--verbose" ] if self.verbose else command, universal_newlines=True)
-            # validate in-place results on src directory
-            command = [ sys.executable, "patchtool.py", 'validate', '-s', self.dst, '-d', self.src, '-p', self.pch ]
-            self.trace(command)
-            subprocess.check_call(command + [ "--verbose" ] if self.verbose else command, universal_newlines=True)
-            # diff dst vs src to validate the validation
-            command = [ 'diff', '-q', '-r', self.dst, self.src ]
-            self.trace(command)
-            subprocess.check_call(command, universal_newlines=True)
-        except:
+
+            #
+            # Patch apply in-place on src directory
+            #
+
+            self.execute([ sys.executable, "patchtool.py", 'apply', '-s', self.src, '-d', self.src, '-p', self.pch ])
+            self.execute([ sys.executable, "patchtool.py", 'validate', '-s', self.dst, '-d', self.src, '-p', self.pch ])
+            self.execute([ 'diff', '-q', '-r', self.dst, self.src ])
+
+            #
+            # Simulate patch failure and recovery
+            #
+
+            self.initialize()
+            shutil.rmtree(self.out, ignore_errors=True)
+
+            missing = []
+            for filename in self.src_files:
+                src_filename = os.path.join(self.src, filename)
+                os.rename(src_filename, f'{src_filename}.missing')
+                missing.append(src_filename)
+            
+            while len(missing):
+                try:
+                    self.execute([ sys.executable, "patchtool.py", 'apply', '-s', self.src, '-d', self.out, '-p', self.pch ], self.verbose)
+                except:
+                    size = len(missing) / 2
+                    while len(missing) >= size:
+                        src_filename = missing.pop()
+                        os.rename(f'{src_filename}.missing', src_filename)
+
+            self.execute([ sys.executable, "patchtool.py", 'validate', '-s', self.dst, '-d', self.src, '-p', self.pch ])
+            self.execute([ 'diff', '-q', '-r', self.dst, self.src ])
+           
+
+        except Exception as e:
             print("Failed")
+            self.trace(e)
             exit(1)
+
         # remove test data
         self.cleanup()
+
+    def execute(self, command, verbose=False):
+        self.trace(command)
+        subprocess.check_call(command + [ "--verbose" ] if verbose else command, universal_newlines=True, stderr=subprocess.DEVNULL)
 
     def generate_random(self, path, size):
         while size:
