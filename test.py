@@ -81,7 +81,7 @@ class PatchToolTest(PatchTool):
             print("Failed")
             exit(1)
         # remove test data
-        #self.cleanup()
+        self.cleanup()
 
     def generate_random(self, path, size):
         while size:
