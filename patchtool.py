@@ -3,7 +3,9 @@
 # desc: Binary delta patching tool
 # 
 
-import subprocess, argparse, hashlib, shutil, json, sys, re, os, io
+import multiprocessing, subprocess, argparse, hashlib, shutil, json, sys, re, os, io
+
+from functools import partial
 
 usage = f'''
 
@@ -22,6 +24,21 @@ the apply command can be run again to resume patching.
 
 '''
 
+# generate hash of filename
+def perform_hash(verbose, filename):
+    if verbose:
+        print(f'Hashing {filename}...')
+    hash = hashlib.sha256()
+    try:
+        with open(filename, 'rb') as inpfile:
+            block = inpfile.read(io.DEFAULT_BUFFER_SIZE)
+            while len(block) != 0:
+                hash.update(block)
+                block = inpfile.read(io.DEFAULT_BUFFER_SIZE)
+    except:
+        pass
+    return hash.hexdigest()
+
 class PatchTool:
 
     def __init__(self, src, dst, pch, out, split, verbose):
@@ -36,6 +53,8 @@ class PatchTool:
             self.pat += [ "(.*)\." + ext + ":{0}\.(.*)" ]
         # initialize blank manifest
         self.manifest = { "src": { }, "dst": { }, "pch": { } }
+        # prepare to process on each of the system's cpus
+        self.pool = multiprocessing.Pool(processes = multiprocessing.cpu_count())
 
     def initialize(self):
         # initialize directories
@@ -210,12 +229,22 @@ class PatchTool:
                 yield from self.find_dirs(os.path.join(path, current))
 
     def generate_hashes(self, manifest, dirs):
+        # queue up the hash generators
+        queue = []
+        for dir in dirs:
+            for filename in getattr(self, f'{dir}_files'):
+                queue.append(os.path.join(getattr(self, dir), filename))
+
+        # perform the hashes
+        tasks = list(self.pool.imap(partial(perform_hash, self.verbose), queue))
+
+        # retrieve the results in the same order as queued
         for dir in dirs:
             if dir not in manifest:
                 manifest[dir] = { }
             for filename in getattr(self, f'{dir}_files'):
                 manifest[dir][filename] = {
-                    'sha256': self.generate_hash(os.path.join(getattr(self, dir), filename))
+                    'sha256': tasks.pop(0)
                 }
 
     def generate_hash(self, path):
