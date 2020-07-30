@@ -17,7 +17,7 @@ class PatchTool:
         arg_parser.add_argument('-d', '--dst', dest='dst', default='dst', help='destination directory')
         arg_parser.add_argument('-p', '--patch', dest='pch', default='pch', help='patch directory')
         arg_parser.add_argument('-o', '--out', dest='out', default='out', help='output directory (for tests)')
-        arg_parser.add_argument('-x', '--split', dest='split', default=[ 'uasset' ], nargs="*", help='zero or more split file extensions')
+        arg_parser.add_argument('-x', '--split', dest='split', default=[ 'uasset', 'umap' ], nargs="*", help='zero or more split file extensions')
         arg_parser.add_argument('-v', '--verbose', dest='verbose', action="store_true", help='increase verbosity')
         self.args = arg_parser.parse_args()
         self.initialize()
@@ -131,10 +131,10 @@ class PatchTool:
 
         # look for files which needed to be added or patched
         self.verbose(f'Adding/patching files...')
-        for dependents in [ True, False ]:
+        for source in [ False, True ]:
             for dst_filename in self.manifest['dst']:
-                # first pass, don't overwrite files which have dependents (to support in-place patching)
-                if dependents and 'src' in self.manifest['dst'][dst_filename] and self.manifest['dst'][dst_filename]['src'] == dst_filename:
+                # first pass, don't overwrite source files which other files depend on (to support in-place patching)
+                if source != ('src' in self.manifest['dst'][dst_filename] and self.manifest['dst'][dst_filename]['src'] == dst_filename):
                     continue
                 # check if destination already matches
                 dst_hash = self.generate_hash(os.path.join(self.dst, dst_filename))
@@ -258,8 +258,18 @@ class PatchTool:
         print('Validation complete: OK')
 
     def copyfile(self, src, dst):
+        tmp = f'{dst}.tmp'
         os.makedirs(os.path.dirname(dst), exist_ok=True)
-        shutil.copyfile(src, dst)
+        # perform atomic file copy/replace
+        with open(src, 'rb') as inpfile:
+            with open(tmp, 'wb') as outfile:
+                block = inpfile.read(io.DEFAULT_BUFFER_SIZE)
+                while len(block) != 0:
+                    outfile.write(block)
+                    block = inpfile.read(io.DEFAULT_BUFFER_SIZE)
+                outfile.flush()
+                os.fsync(outfile.fileno())
+        os.replace(tmp, dst)
 
     def verbose(self, str):
         if self.args.verbose:
