@@ -39,6 +39,20 @@ def perform_hash(verbose, filename):
         pass
     return hash.hexdigest()
 
+# perform xdelta3 src => dst = pch
+def perform_xdelta3(verbose, tuple):
+    (src_filename, dst_filename, pch_filename) = tuple
+    if verbose:
+        print(f'Creating delta for {dst_filename}...')
+    os.makedirs(os.path.dirname(pch_filename), exist_ok=True)
+    command = [
+        "xdelta3", "-e", "-9", "-f",
+        "-s", src_filename, dst_filename, pch_filename
+    ]
+    if verbose:
+        print(' '.join(command))
+    subprocess.check_output(command, universal_newlines=True)
+
 class PatchTool:
 
     def __init__(self, src, dst, pch, out, split, verbose):
@@ -81,6 +95,7 @@ class PatchTool:
 
         # search for modified files and generate xdelta3 patches for them
         self.trace(f'Creating deltas for modified files...')
+        deltas_queue = []
         for (src_regex, dst_regex) in [ pattern.split(':') for pattern in self.pat ]:
             compiled = re.compile(src_regex)
             for src_match in filter(None, [ compiled.fullmatch(src_filename) for src_filename in self.src_files]):
@@ -91,7 +106,9 @@ class PatchTool:
                 for group in range(compiled.groups):
                     dst_regex_new = dst_regex_new.replace('{' + str(group) + '}', re.escape(src_match[group+1]))
                 # handle destination file regex matches
-                self.generate_deltas(src_match[0], dst_regex_new);
+                self.generate_deltas(deltas_queue, src_match[0], dst_regex_new);
+        # perform the pending deltas
+        tasks = list(self.pool.imap(partial(perform_xdelta3, self.verbose), deltas_queue))
 
         # handle added files by copying over the destination file directly
         self.trace(f'Copying added files...')
@@ -112,7 +129,7 @@ class PatchTool:
         with open(os.path.join(self.pch, 'manifest.json'), 'w') as outfile:
             json.dump(self.manifest, outfile, indent=4)
 
-    def generate_deltas(self, src_filename, dst_regex):
+    def generate_deltas(self, deltas_queue, src_filename, dst_regex):
         compiled = re.compile(dst_regex)
         # iterate through our regex destination pattern, matching against all destination files
         for dst_match in filter(None, [ compiled.fullmatch(dst_filename) for dst_filename in self.dst_files]):
@@ -123,24 +140,17 @@ class PatchTool:
                 continue
 
             # if the regex pattern matched, check if it requires an xdelta3 patch
-            self.trace(f'Matched destination {compiled} => {dst_filename}')
+            self.trace(f'Matched destination {dst_regex} => {dst_filename}')
             self.manifest['dst'][dst_filename]['src'] = src_filename
 
             # generate xdelta3 if the files don't already match
             if self.manifest['src'][src_filename]['sha256'] != self.manifest['dst'][dst_filename]['sha256']:
-                self.trace(f'Creating delta for {dst_filename}...')
-                self.generate_xdelta3(self.manifest['dst'][dst_filename], src_filename, dst_filename)
-
-    def generate_xdelta3(self, dst, src_filename, dst_filename):
-        pch_filename = os.path.join(self.pch, dst_filename + ".xdelta3")
-        os.makedirs(os.path.dirname(pch_filename), exist_ok=True)
-        command = [
-            "xdelta3", "-e", "-9", "-f",
-            "-s", os.path.join(self.src, src_filename), os.path.join(self.dst, dst_filename), pch_filename
-        ]
-        self.trace(' '.join(command))
-        subprocess.check_output(command, universal_newlines=True)
-        dst['xdelta3'] = os.path.relpath(pch_filename, self.pch)
+                pch_filename = f'{dst_filename}.xdelta3'
+                abs_src_filename = os.path.join(self.src, src_filename)
+                abs_dst_filename = os.path.join(self.dst, dst_filename)
+                abs_pch_filename = os.path.join(self.pch, pch_filename)
+                deltas_queue.append((abs_src_filename, abs_dst_filename, abs_pch_filename))
+                self.manifest['dst'][dst_filename]['xdelta3'] = pch_filename
 
     def apply(self):
         # read the manifest file
@@ -229,15 +239,10 @@ class PatchTool:
                 yield from self.find_dirs(os.path.join(path, current))
 
     def generate_hashes(self, manifest, dirs):
-        # queue up the hash generators
-        queue = []
-        for dir in dirs:
-            for filename in getattr(self, f'{dir}_files'):
-                queue.append(os.path.join(getattr(self, dir), filename))
-
+        # queue up the hashes
+        queue = [ os.path.join(getattr(self, dir), filename) for dir in dirs for filename in getattr(self, f'{dir}_files') ]
         # perform the hashes
         tasks = list(self.pool.imap(partial(perform_hash, self.verbose), queue))
-
         # retrieve the results in the same order as queued
         for dir in dirs:
             if dir not in manifest:
