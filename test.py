@@ -78,7 +78,7 @@ class PatchToolTest(PatchTool):
             
             while len(missing):
                 try:
-                    self.execute([ sys.executable, "patchtool.py", 'apply', '-s', self.src, '-d', self.out, '-p', self.pch ], self.verbose)
+                    self.execute([ sys.executable, "patchtool.py", 'apply', '-s', self.src, '-d', self.out, '-p', self.pch ], self.verbose, True)
                 except:
                     size = len(missing) / 2
                     while len(missing) >= size:
@@ -96,9 +96,9 @@ class PatchToolTest(PatchTool):
         # remove test data
         self.cleanup()
 
-    def execute(self, command, verbose=False):
+    def execute(self, command, verbose=False, silent=False):
         self.trace(command)
-        subprocess.check_call(command + [ "--verbose" ] if verbose else command, universal_newlines=True, stderr=subprocess.DEVNULL)
+        subprocess.check_call(command + [ "--verbose" ] if verbose else command, universal_newlines=True, stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL if silent else None)
 
     def generate_random(self, path, size):
         while size:
