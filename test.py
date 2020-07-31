@@ -23,10 +23,11 @@ class PatchToolTest(PatchTool):
     chance_add = (60, 70)
 
     def __init__(self, verbose):
-        super().__init__('src', 'dst', 'pch', 'out', [ 'uasset', 'umap' ], verbose=verbose)
+        super().__init__('src', 'dst', 'pch', [ 'uasset', 'umap' ], verbose=verbose)
         # repeatability
         random.seed(0)
         # configure test directories
+        self.out = os.path.abspath('out')
         self.cleanup()
         # initialize state
         self.sequence_number = 0
@@ -186,10 +187,10 @@ class PatchToolTest(PatchTool):
                 outfile.write(blocks[i])
 
     def cleanup(self):
-        shutil.rmtree(self.src, ignore_errors=True)
-        shutil.rmtree(self.dst, ignore_errors=True)
-        shutil.rmtree(self.pch, ignore_errors=True)
-        shutil.rmtree(self.out, ignore_errors=True)
+        shutil.rmtree(os.path.abspath(self.src), ignore_errors=True)
+        shutil.rmtree(os.path.abspath(self.dst), ignore_errors=True)
+        shutil.rmtree(os.path.abspath(self.pch), ignore_errors=True)
+        shutil.rmtree(os.path.abspath(self.out), ignore_errors=True)
 
     def generate_id(self):
         id = self.sequence_number
