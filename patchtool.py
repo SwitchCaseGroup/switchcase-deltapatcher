@@ -29,6 +29,13 @@ def trace(verbose, text):
     if verbose:
         print(text)
 
+# error resilient makedirs
+def makedirs(dir):
+    try:
+        os.makedirs(dir, exist_ok=True)
+    except:
+        pass
+
 # generate hash of filename
 def perform_hash(verbose, filename):
     trace(verbose, f'Hashing {filename}...')
@@ -46,7 +53,11 @@ def perform_hash(verbose, filename):
 # perform atomic file replace
 def atomic_replace(src, dst):
     tmp = f'{dst}.tmp'
-    os.makedirs(os.path.dirname(dst), exist_ok=True)
+    # ensure directories exist (can safely fail if another worker collides)
+    try:
+        makedirs(os.path.dirname(dst))
+    except:
+        pass
     # perform atomic file copy/replace
     with open(src, 'rb') as inpfile:
         with open(tmp, 'wb') as outfile:
@@ -82,18 +93,16 @@ class XDelta3:
     def perform_xdelta3(self):
         # hash the source file
         if self.src_filename:
-            self.trace(f'Hashing {self.src_filename}...')
             self.src_sha256 = perform_hash(self.verbose, self.src_filename)
         # process all of the potential patches
         for patch in self.patches:
             # hash the destination file
-            self.trace(f'Hashing {patch.dst_filename}...')
             patch.dst_sha256 = perform_hash(self.verbose, patch.dst_filename)
             # only apply patches when there's a source who's hash doesn't match destination
             if self.src_filename and self.src_sha256 != patch.dst_sha256:
                 # create the xdelta3 patch file
                 self.trace(f'Creating delta for {patch.dst_filename}...')
-                os.makedirs(os.path.dirname(patch.pch_filename), exist_ok=True)
+                makedirs(os.path.dirname(patch.pch_filename))
                 command = [
                     "xdelta3", "-e", "-9", "-f",
                     "-s", self.src_filename, patch.dst_filename, patch.pch_filename
@@ -101,7 +110,6 @@ class XDelta3:
                 self.trace(' '.join(command))
                 subprocess.check_output(command, universal_newlines=True)
                 # hash the patch file
-                self.trace(f'Hashing {patch.pch_filename}...')
                 patch.pch_sha256 = perform_hash(self.verbose, patch.pch_filename)
             # if there is no source, copy the file itself as the patch
             elif not self.src_filename:
@@ -111,7 +119,6 @@ class XDelta3:
         return self
 
 class PatchTool:
-
     def __init__(self, src, dst, pch, out, split, verbose):
         self.src = src
         self.dst = dst
@@ -134,7 +141,7 @@ class PatchTool:
             # convert dirs to absolute paths
             setattr(self, dir, os.path.abspath(getattr(self, dir)))
             # ensure directories exist
-            os.makedirs(getattr(self, dir), exist_ok=True)
+            makedirs(getattr(self, dir))
             # find all files in each directory
             setattr(self, f'{dir}_files', [ os.path.relpath(filename, getattr(self, dir)) for filename in self.find_files(getattr(self, dir)) ])
 
@@ -171,7 +178,7 @@ class PatchTool:
             json.dump(self.manifest, outfile, indent=4)
 
     def generate_queue(self):
-        # search for modified files and generate xdelta3 patches for them
+        # search for modified files and queue patches for them
         self.trace(f'Creating deltas for modified files...')
         for (src_regex, dst_regex) in [ pattern.split(':') for pattern in self.pat ]:
             compiled = re.compile(src_regex)
@@ -185,7 +192,7 @@ class PatchTool:
                 # handle destination file regex matches
                 yield from self.generate_deltas(src_match[0], dst_regex_new);
 
-        # search for files without a source to patch from
+        # search for files without a source and queue patches for them
         self.trace(f'Copying added files...')
         for dst_filename in [dst_filename for dst_filename in self.dst_files if dst_filename not in self.manifest['dst']]:
             pch_filename = os.path.join(self.pch, dst_filename)
@@ -330,7 +337,7 @@ class PatchTool:
         out_filename = os.path.join(self.dst, dst_filename)
         tmp_filename = f'{out_filename}.patched'
         # apply xdelta3 patch to temporary file
-        os.makedirs(os.path.dirname(out_filename), exist_ok=True)
+        makedirs(os.path.dirname(out_filename))
         command = [
             "xdelta3", "-d", "-f",
             "-s", src_filename, pch_filename, tmp_filename
