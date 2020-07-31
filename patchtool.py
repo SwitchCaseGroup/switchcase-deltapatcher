@@ -239,14 +239,12 @@ class PatchTool:
                 yield from self.find_dirs(os.path.join(path, current))
 
     def generate_hashes(self, manifest, dirs):
-        # queue up the hashes
+        # queue the hashes
         queue = [ os.path.join(getattr(self, dir), filename) for dir in dirs for filename in getattr(self, f'{dir}_files') ]
-        # perform the hashes
+        # perform hashes in parallel
         tasks = list(self.pool.imap(partial(perform_hash, self.verbose), queue))
-        # retrieve the results in the same order as queued
+        # retrieve results in same order as queued
         for dir in dirs:
-            if dir not in manifest:
-                manifest[dir] = { }
             for filename in getattr(self, f'{dir}_files'):
                 manifest[dir][filename] = {
                     'sha256': tasks.pop(0)
@@ -291,7 +289,7 @@ class PatchTool:
 
         # generate local hashes
         self.trace(f'Generating hashes...')
-        local_manifest = {}
+        local_manifest = { "src": { }, "dst": { }, "pch": { } }
         self.generate_hashes(local_manifest, ['src', 'dst'])
 
         # validate all src files exist in dst and hashes match
