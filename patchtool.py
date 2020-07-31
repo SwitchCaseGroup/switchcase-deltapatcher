@@ -3,7 +3,7 @@
 # desc: Binary delta patching tool
 # 
 
-import multiprocessing, subprocess, argparse, hashlib, shutil, json, sys, re, os, io
+import multiprocessing, subprocess, argparse, hashlib, shutil, json, sys, os, io
 
 from functools import partial
 
@@ -33,8 +33,9 @@ def trace(verbose, text):
 def makedirs(dir):
     try:
         os.makedirs(dir, exist_ok=True)
-    except:
-        pass
+    except OSError as e:
+        print(dir, e)
+        raise
 
 # generate hash of filename
 def perform_hash(verbose, filename):
@@ -125,10 +126,8 @@ class PatchTool:
         self.pch = pch
         self.out = out
         self.verbose = verbose
-        # add default regex pattern and prepare any additional patterns from CLI arguments
-        self.pat = [ "(.*):{0}" ]
-        for ext in split:
-            self.pat += [ "(.*)\." + ext + ":{0}\.(.*)" ]
+        # add default pattern and prepare any additional patterns from CLI arguments
+        self.split = [ ('', '') ] + [ (f'.{ext}', '.') for ext in split]
         # initialize blank manifest
         self.manifest = { "src": { }, "dst": { }, "pch": { } }
         # prepare to process on each of the system's cpus
@@ -180,17 +179,14 @@ class PatchTool:
     def generate_queue(self):
         # search for modified files and queue patches for them
         self.trace(f'Creating deltas for modified files...')
-        for (src_regex, dst_regex) in [ pattern.split(':') for pattern in self.pat ]:
-            compiled = re.compile(src_regex)
-            for src_match in filter(None, [ compiled.fullmatch(src_filename) for src_filename in self.src_files]):
-                # if the regex pattern matched, find all destination matches
-                self.trace(f'Matched source "{src_regex}" => {src_match[0]}')
-                # replace destination pattern {N} variables with results from source regex
-                dst_regex_new = dst_regex
-                for group in range(compiled.groups):
-                    dst_regex_new = dst_regex_new.replace('{' + str(group) + '}', re.escape(src_match[group+1]))
-                # handle destination file regex matches
-                yield from self.generate_deltas(src_match[0], dst_regex_new);
+        for (ending, append) in self.split:
+            for src_filename in [src_filename for src_filename in self.src_files if src_filename.endswith(ending)]:
+                # if the pattern matched, find all destination matches
+                self.trace(f'Matched source ("{ending}", "{append}") => {src_filename}')
+                # prepare prefix for destination match
+                dst_prefix = src_filename[-len(ending):] + append
+                # handle destination file matches
+                yield from self.generate_deltas(src_filename, dst_prefix);
 
         # search for files without a source and queue patches for them
         self.trace(f'Copying added files...')
@@ -201,17 +197,15 @@ class PatchTool:
             xdelta3.add_patch(os.path.join(self.dst, dst_filename), pch_filename)
             yield xdelta3
         
-    def generate_deltas(self, src_filename, dst_regex):
-        compiled = re.compile(dst_regex)
+    def generate_deltas(self, src_filename, dst_prefix):
         xdelta3 = XDelta3(self.verbose, os.path.join(self.src, src_filename))
-        # iterate through our regex destination pattern, matching against all destination files
-        for dst_match in filter(None, [ compiled.fullmatch(dst_filename) for dst_filename in self.dst_files]):
-            dst_filename = dst_match[0]
+        # iterate through our destination prefix, matching against all destination files
+        for dst_filename in [dst_filename for dst_filename in self.dst_files if dst_filename.startswith(dst_prefix)]:
             # skip if we already have an earlier match
             if dst_filename in self.manifest['dst']:
-                self.trace(f'Skipping duplicate match {dst_regex} => {dst_filename}')
+                self.trace(f'Skipping duplicate match {dst_filename}')
                 continue
-            self.trace(f'Matched destination {dst_regex} => {dst_filename}')
+            self.trace(f'Matched destination {dst_filename}')
             # generate xdelta3 if the files don't already match
             pch_filename = f'{dst_filename}.xdelta3'
             abs_dst_filename = os.path.join(self.dst, dst_filename)
