@@ -10,7 +10,9 @@ import subprocess, argparse, random, shutil, json, sys, re, os, io
 class PatchToolTest(PatchTool):
     # test configuration
     target_size = 8*1024*1024
+    min_file_size = 1
     max_file_size = 500*1024
+    min_chunk_size = 1
     max_chunk_size = max_file_size / 1024
     changed_bytes = 0
 
@@ -100,7 +102,7 @@ class PatchToolTest(PatchTool):
 
     def generate_random(self, path, size):
         while size:
-            file_size = random.randint(1, min(self.max_file_size, size))
+            file_size = random.randint(min(self.min_file_size, size), min(self.max_file_size, size))
             path_elements = random.randint(1, 4)
             filename = path
             for i in range(path_elements):
@@ -139,7 +141,7 @@ class PatchToolTest(PatchTool):
         with open(filename, 'rb') as inpfile:
             while size != 0:
                 # read the next chunk of data
-                chunk_size = random.randint(1, min(self.max_chunk_size, size))
+                chunk_size = random.randint(min(self.min_chunk_size, size), min(self.max_chunk_size, size))
                 block = inpfile.read(chunk_size)
                 choice = random.randint(0, 99)
                 # randomly skip ("remove") the chunk
