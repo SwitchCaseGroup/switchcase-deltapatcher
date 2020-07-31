@@ -186,7 +186,21 @@ class PatchTool:
                 # prepare prefix for destination match
                 dst_prefix = src_filename[-len(ending):] + append
                 # handle destination file matches
-                yield from self.generate_deltas(src_filename, dst_prefix);
+                xdelta3 = XDelta3(self.verbose, os.path.join(self.src, src_filename))
+                # iterate through our destination prefix, matching against all destination files
+                for dst_filename in [dst_filename for dst_filename in self.dst_files if dst_filename.startswith(dst_prefix)]:
+                    # skip if we already have an earlier match
+                    if dst_filename in self.manifest['dst']:
+                        self.trace(f'Skipping duplicate match {dst_filename}')
+                        continue
+                    self.trace(f'Matched destination {dst_filename}')
+                    # generate xdelta3 if the files don't already match
+                    pch_filename = f'{dst_filename}.xdelta3'
+                    abs_dst_filename = os.path.join(self.dst, dst_filename)
+                    abs_pch_filename = os.path.join(self.pch, pch_filename)
+                    xdelta3.add_patch(abs_dst_filename, abs_pch_filename)
+                    self.manifest['dst'][dst_filename] = { 'src': src_filename }
+                yield xdelta3
 
         # search for files without a source and queue patches for them
         self.trace(f'Copying added files...')
@@ -197,23 +211,6 @@ class PatchTool:
             xdelta3.add_patch(os.path.join(self.dst, dst_filename), pch_filename)
             yield xdelta3
         
-    def generate_deltas(self, src_filename, dst_prefix):
-        xdelta3 = XDelta3(self.verbose, os.path.join(self.src, src_filename))
-        # iterate through our destination prefix, matching against all destination files
-        for dst_filename in [dst_filename for dst_filename in self.dst_files if dst_filename.startswith(dst_prefix)]:
-            # skip if we already have an earlier match
-            if dst_filename in self.manifest['dst']:
-                self.trace(f'Skipping duplicate match {dst_filename}')
-                continue
-            self.trace(f'Matched destination {dst_filename}')
-            # generate xdelta3 if the files don't already match
-            pch_filename = f'{dst_filename}.xdelta3'
-            abs_dst_filename = os.path.join(self.dst, dst_filename)
-            abs_pch_filename = os.path.join(self.pch, pch_filename)
-            xdelta3.add_patch(abs_dst_filename, abs_pch_filename)
-            self.manifest['dst'][dst_filename] = { 'src': src_filename }
-        yield xdelta3
-
     def apply(self):
         # read the manifest file
         self.trace(f'Reading manifest...')
