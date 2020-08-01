@@ -35,7 +35,7 @@ the apply command can be run again to resume patching.
 
 
 class PatchTool:
-    def __init__(self, src, dst, pch,  split, verbose):
+    def __init__(self, src, dst, pch, split, verbose):
         self.src = src
         self.dst = dst
         self.pch = pch
@@ -139,7 +139,7 @@ class PatchTool:
 
     def get_extension(self, filename):
         extension_offs = filename.rfind('.')
-        return filename[extension_offs+1:] if extension_offs != -1 else ''
+        return filename[extension_offs + 1:] if extension_offs != -1 else ''
 
     def get_prefix(self, filename):
         extension_offs = filename.rfind('.')

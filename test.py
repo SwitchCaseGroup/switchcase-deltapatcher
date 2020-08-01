@@ -18,9 +18,9 @@ import io
 
 class PatchToolTest(PatchTool):
     # test configuration
-    target_size = 8*1024*1024
+    target_size = 8 * 1024 * 1024
     min_file_size = 1
-    max_file_size = 500*1024
+    max_file_size = 500 * 1024
     min_chunk_size = 1
     max_chunk_size = max_file_size / 1024
     changed_bytes = 0
@@ -151,8 +151,7 @@ class PatchToolTest(PatchTool):
                 if choice >= self.chance_split[0] and choice < self.chance_split[1]:
                     self.split_file(filename)
         # randomly add new files
-        new_size = int(self.target_size *
-                       (self.chance_add[1] - self.chance_add[0]) / 100)
+        new_size = int(self.target_size * (self.chance_add[1] - self.chance_add[0]) / 100)
         self.changed_bytes += new_size
         self.generate_random(self.dst, new_size)
 
