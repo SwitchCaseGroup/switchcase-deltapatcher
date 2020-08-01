@@ -92,11 +92,11 @@ class PatchTool:
     def generate_queue(self):
         # search for modified files and queue patches for them
         self.trace(f'Creating deltas for modified files...')
-        for src_filename in self.src_files:
+        for (src_filename, dst_filenames) in self.generate_map():
             # create deltas relative to this source file
             xdelta3 = XDelta3(self.verbose, os.path.join(self.src, src_filename))
             # iterate through our destination files, looking for matches
-            for dst_filename in [dst_filename for dst_filename in self.dst_files if self.merged(src_filename, dst_filename)]:
+            for dst_filename in dst_filenames:
                 # skip if we already have an earlier match
                 if dst_filename in self.manifest['dst']:
                     self.trace(f'Skipping duplicate match {dst_filename}')
@@ -119,6 +119,24 @@ class PatchTool:
             xdelta3 = XDelta3(self.verbose, None)
             xdelta3.add_patch(XDelta3Patch(os.path.join(self.dst, dst_filename), pch_filename))
             yield xdelta3
+
+    def generate_map(self):
+        map = defaultdict(list)
+        for dst_filename in self.dst_files:
+            extension = dst_filename.rfind('.')
+            if extension != -1:
+                map[dst_filename[:extension]].append(dst_filename)
+                continue
+            map[dst_filename].append(dst_filename)
+        for src_filename in self.src_files:
+            extension = src_filename.rfind('.')
+            if extension != -1 and src_filename[extension+1:] in self.split:
+                dst_filenames = map[src_filename[:extension]]
+                if len(dst_filenames):
+                    yield (src_filename, dst_filenames)
+            elif src_filename in self.dst_files:
+                yield (src_filename, [ src_filename ])
+        return map
 
     def get_extension(self, filename):
         extension_offs = filename.rfind('.')
