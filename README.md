@@ -51,11 +51,11 @@ optional arguments:
 
 With arbitrary hardware looking to patch ExpressoGame with Unreal Engine 4.14.3 to Unreal Engine 4.25.1 we saw the following results.
 
-| Generation   | 43m 28s  |
-|--------------|----------|
-| Copy of 4.25 |  7m 35s  |
-|--------------|----------|
-| Apply        | 11m 37s  |
+| Task         | Elapsed Time |
+|--------------|--------------|
+| Generation   | 43m 28s      |
+| Copy of 4.25 |  7m 35s      |
+| Apply        | 11m 37s      |
 
 ## Style
 
