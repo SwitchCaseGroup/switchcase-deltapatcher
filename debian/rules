@@ -1,0 +1,39 @@
+#!/usr/bin/make -f
+
+# https://wiki.debian.org/Python/AppStyleGuide
+
+include /usr/share/dpkg/pkg-info.mk
+
+DH_ARGS=--with=python3 --buildsystem=pybuild
+# Run setup.py with the default python3 last so that the scripts use
+# #!/usr/bin/python3 and not #!/usr/bin/python3.X.
+PY3 := $(filter-out $(PY3DEFAULT),$(PY3REQUESTED)) python3
+
+PYTHON2_VERSIONS = $(shell pyversions -r)
+PYTHON3_VERSIONS = $(shell py3versions -r)
+py3sdo = set -e; $(foreach py, $(PYTHON3_VERSIONS), $(py) $(1);)
+pyalldo = set -e; $(foreach py, $(PYTHON2_VERSIONS) $(PYTHON3_VERSIONS), $(py) $(1);)
+
+%:
+	dh $@ $(DH_ARGS)
+
+ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
+override_dh_auto_test:
+	$(call pyalldo, -m unittest discover -vv test/)
+endif
+
+override_dh_auto_build:
+	dh_auto_build
+	$(call py3sdo, setup.py build)
+
+override_dh_auto_install:
+	# whichever called last, will result in shebang update
+	# in this case, the scripts will end up with python3 shebang
+	# reverse the order if you want to continue using python2 shebang
+	dh_auto_install
+	$(call py3sdo, setup.py install --root=$(CURDIR)/debian/$(DEB_SOURCE) --install-layout=deb)
+
+override_dh_auto_clean:
+	dh_auto_clean
+	rm -rf build
+	rm -rf *.egg-info
