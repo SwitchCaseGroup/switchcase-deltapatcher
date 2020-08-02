@@ -281,7 +281,7 @@ class PatchTool:
 
         # generate local hashes
         self.trace(f'Generating hashes...')
-        local_manifest = {"src": {}, "dst": {}, "pch": {}}
+        local_manifest = defaultdict(dict)
         self.generate_hashes(local_manifest, ['src', 'dst'])
 
         # validate all src files exist in dst and hashes match
@@ -297,6 +297,17 @@ class PatchTool:
         for dst_filename in self.dst_files:
             if dst_filename not in self.src_files:
                 self.error(f'{dst_filename}: missing from {self.src}')
+
+        # generate local directory lists
+        src_dirs = [os.path.relpath(
+            filename, self.src) for filename in self.find_dirs(self.src)]
+        dst_dirs = [os.path.relpath(
+            filename, self.dst) for filename in self.find_dirs(self.dst)]
+
+        # validate exact dir structure
+        if src_dirs != dst_dirs:
+            diff = { k : dst_dirs[k] for k in set(dst_dirs) - set(src_difs) }
+            self.error(f'{diff}')
 
     def trace(self, str):
         if self.verbose:
