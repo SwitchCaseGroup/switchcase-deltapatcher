@@ -39,6 +39,9 @@ class PatchTool:
         self.src = src
         self.dst = dst
         self.pch = pch
+        self.src_files = []
+        self.dst_files = []
+        self.pch_files = []
         self.split = split
         self.verbose = verbose
         # initialize blank manifest
@@ -185,11 +188,11 @@ class PatchTool:
                 os.remove(os.path.join(self.dst, filename))
 
         # perform patching in parallel (dependent files)
-        for xdelta3 in self.pool.imap_unordered(XDelta3.apply_patches, self.apply_queue(False)):
+        for _ in self.pool.imap_unordered(XDelta3.apply_patches, self.apply_queue(False)):
             pass
 
         # perform patching in parallel (dependencies)
-        for xdelta3 in self.pool.imap_unordered(XDelta3.apply_patches, self.apply_queue(True)):
+        for _ in self.pool.imap_unordered(XDelta3.apply_patches, self.apply_queue(True)):
             pass
 
         # remove any dirs not in the manifest

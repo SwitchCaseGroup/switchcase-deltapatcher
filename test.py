@@ -126,7 +126,7 @@ class PatchToolTest(PatchTool):
                 min(self.min_file_size, size), min(self.max_file_size, size))
             path_elements = random.randint(1, 4)
             filename = path
-            for i in range(path_elements):
+            for _ in range(path_elements):
                 filename = os.path.join(filename, self.generate_id())
             os.makedirs(os.path.dirname(filename), exist_ok=True)
             with open(filename, 'wb') as outfile:
@@ -199,7 +199,7 @@ class PatchToolTest(PatchTool):
         blocks = []
         with open(parts[0], 'rb') as inpfile:
             chunk_size = int(size / len(parts))
-            for part in parts:
+            for _ in parts:
                 block = inpfile.read(chunk_size)
                 blocks.append(block)
         # write file parts
