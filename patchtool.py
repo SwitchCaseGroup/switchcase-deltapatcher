@@ -71,20 +71,20 @@ class PatchTool:
             if xdelta3.src_filename:
                 src_filename = os.path.relpath(xdelta3.src_filename, self.src)
                 self.manifest['src'][src_filename] = {
-                    'sha256': xdelta3.src_sha256, "xdelta3": {}}
+                    'sha1': xdelta3.src_sha1, "xdelta3": {}}
             # process each patch's results
             for patch in xdelta3.patches:
                 # update manifest with dst hash
                 dst_filename = os.path.relpath(patch.dst_filename, self.dst)
                 self.manifest['dst'][dst_filename] = {
-                    'sha256': patch.dst_sha256}
+                    'sha1': patch.dst_sha1}
                 # process patch file result if there was one
-                if patch.pch_sha256:
+                if patch.pch_sha1:
                     # update manifest with patch manifest
                     pch_filename = os.path.relpath(
                         patch.pch_filename, self.pch)
                     self.manifest['pch'][pch_filename] = {
-                        'sha256': patch.pch_sha256}
+                        'sha1': patch.pch_sha1}
                     # if this patch is a delta, update manifest with the delta's hash
                     if xdelta3.src_filename:
                         self.manifest['src'][src_filename]['xdelta3'][dst_filename] = pch_filename
@@ -112,10 +112,6 @@ class PatchTool:
                 self.verbose, os.path.join(self.src, src_filename))
             # iterate through our destination files, looking for matches
             for dst_filename in dst_filenames:
-                # skip if we already have an earlier match
-                if dst_filename in self.manifest['dst']:
-                    self.trace(f'Skipping duplicate match {dst_filename}')
-                    continue
                 self.trace(f'Matched destination {dst_filename}')
                 # mark this dst as having been queued for processing already
                 self.manifest['dst'][dst_filename] = {}
@@ -206,16 +202,16 @@ class PatchTool:
         for src_filename in self.manifest['src']:
             xdelta3 = XDelta3(
                 self.verbose, os.path.join(self.src, src_filename))
-            xdelta3.src_sha256 = self.manifest['src'][src_filename]['sha256']
+            xdelta3.src_sha1 = self.manifest['src'][src_filename]['sha1']
             for dst_filename, pch_filename in self.manifest['src'][src_filename].get('xdelta3', {}).items():
                 abs_dst_filename = os.path.join(self.dst, dst_filename)
                 if dependencies == (src_filename == dst_filename):
                     abs_pch_filename = os.path.join(self.pch, pch_filename)
                     patch = XDelta3Patch(abs_dst_filename, abs_pch_filename)
-                    patch.dst_sha256 = self.manifest['dst'][dst_filename]['sha256']
-                    patch.pch_sha256 = self.manifest['pch'][pch_filename]['sha256']
+                    patch.dst_sha1 = self.manifest['dst'][dst_filename]['sha1']
+                    patch.pch_sha1 = self.manifest['pch'][pch_filename]['sha1']
                     xdelta3.add_patch(patch)
-            if src_filename in self.manifest['dst'] and self.manifest['src'][src_filename]['sha256'] == self.manifest['dst'][src_filename]['sha256']:
+            if src_filename in self.manifest['dst'] and self.manifest['src'][src_filename]['sha1'] == self.manifest['dst'][src_filename]['sha1']:
                 if dependencies:
                     abs_dst_filename = os.path.join(self.dst, src_filename)
                     xdelta3.add_patch(XDelta3Patch(abs_dst_filename, None))
@@ -227,7 +223,7 @@ class PatchTool:
                 abs_dst_filename = os.path.join(self.dst, pch_filename)
                 abs_pch_filename = os.path.join(self.pch, pch_filename)
                 xdelta3 = XDelta3(self.verbose, abs_pch_filename)
-                xdelta3.src_sha256 = self.manifest['pch'][pch_filename]['sha256']
+                xdelta3.src_sha1 = self.manifest['pch'][pch_filename]['sha1']
                 xdelta3.add_patch(XDelta3Patch(abs_dst_filename, None))
                 yield xdelta3
 
@@ -254,12 +250,12 @@ class PatchTool:
         for dir in dirs:
             for filename in getattr(self, f'{dir}_files'):
                 manifest[dir][filename] = {
-                    'sha256': tasks.pop(0)
+                    'sha1': tasks.pop(0)
                 }
 
     def generate_hash(self, path):
         self.trace(f'Hashing {path}...')
-        hash = hashlib.sha256()
+        hash = hashlib.sha1()
         try:
             with open(path, 'rb') as inpfile:
                 block = inpfile.read(io.DEFAULT_BUFFER_SIZE)
@@ -285,10 +281,10 @@ class PatchTool:
         for src_filename in self.src_files:
             if src_filename not in self.dst_files:
                 self.error(f'{src_filename}: missing from {self.dst}')
-            elif local_manifest['src'][src_filename]['sha256'] != local_manifest['dst'][src_filename]['sha256']:
-                self.error(f'{src_filename}: src/dst sha256 mismatch!')
-            elif local_manifest['src'][src_filename]['sha256'] != self.manifest['dst'][src_filename]['sha256']:
-                self.error(f'{src_filename}: manifest sha256 mismatch!')
+            elif local_manifest['src'][src_filename]['sha1'] != local_manifest['dst'][src_filename]['sha1']:
+                self.error(f'{src_filename}: src/dst sha1 mismatch!')
+            elif local_manifest['src'][src_filename]['sha1'] != self.manifest['dst'][src_filename]['sha1']:
+                self.error(f'{src_filename}: manifest sha1 mismatch!')
 
         # validate all dst files exist in src
         for dst_filename in self.dst_files:
@@ -308,15 +304,15 @@ class XDelta3Patch:
     def __init__(self, dst_filename, pch_filename):
         self.dst_filename = dst_filename
         self.pch_filename = pch_filename
-        self.dst_sha256 = None
-        self.pch_sha256 = None
+        self.dst_sha1 = None
+        self.pch_sha1 = None
 
 
 class XDelta3:
     def __init__(self, verbose, src_filename):
         self.verbose = verbose
         self.src_filename = src_filename
-        self.src_sha256 = None
+        self.src_sha1 = None
         self.patches = []
 
     def trace(self, text):
@@ -332,13 +328,13 @@ class XDelta3:
     def generate_patches(self):
         # hash the source file
         if self.src_filename:
-            self.src_sha256 = perform_hash(self.verbose, self.src_filename)
+            self.src_sha1 = perform_hash(self.verbose, self.src_filename)
         # process all of the potential patches
         for patch in self.patches:
             # hash the destination file
-            patch.dst_sha256 = perform_hash(self.verbose, patch.dst_filename)
+            patch.dst_sha1 = perform_hash(self.verbose, patch.dst_filename)
             # only apply patches when there's a source who's hash doesn't match destination
-            if self.src_filename and self.src_sha256 != patch.dst_sha256:
+            if self.src_filename and self.src_sha1 != patch.dst_sha1:
                 # create the xdelta3 patch file
                 self.trace(f'Creating delta for {patch.dst_filename}...')
                 makedirs(os.path.dirname(patch.pch_filename))
@@ -349,12 +345,12 @@ class XDelta3:
                 self.trace(' '.join(command))
                 subprocess.check_output(command, universal_newlines=True)
                 # hash the patch file
-                patch.pch_sha256 = perform_hash(
+                patch.pch_sha1 = perform_hash(
                     self.verbose, patch.pch_filename)
             # if there is no source, copy the file itself as the patch
             elif not self.src_filename:
                 atomic_replace(patch.dst_filename, patch.pch_filename)
-                patch.pch_sha256 = patch.dst_sha256
+                patch.pch_sha1 = patch.dst_sha1
         return self
 
     def apply_xdelta3(self, src_filename, dst_filename, pch_filename):
@@ -379,18 +375,18 @@ class XDelta3:
         for patch in self.patches:
             # check if dst already matches
             dst_hash = perform_hash(self.verbose, patch.dst_filename)
-            if patch.dst_sha256 == dst_hash:
+            if patch.dst_sha1 == dst_hash:
                 self.trace(f'Skipping already matching {patch.dst_filename}')
                 continue
             # validate source hash
             if not src_hash:
                 src_hash = perform_hash(self.verbose, self.src_filename)
-            if self.src_sha256 != src_hash:
+            if self.src_sha1 != src_hash:
                 self.error(f'Hash mismatch for {self.src_filename}')
             # validate patch hash
             if patch.pch_filename:
                 pch_hash = perform_hash(self.verbose, patch.pch_filename)
-                if patch.pch_sha256 != pch_hash:
+                if patch.pch_sha1 != pch_hash:
                     self.error(f'Hash mismatch for {self.pch_filename}')
                 # apply the patch
                 self.apply_xdelta3(self.src_filename,
@@ -423,7 +419,7 @@ def makedirs(dir):
 
 def perform_hash(verbose, filename):
     trace(verbose, f'Hashing {filename}...')
-    hash = hashlib.sha256()
+    hash = hashlib.sha1()
     try:
         with open(filename, 'rb') as inpfile:
             block = inpfile.read(io.DEFAULT_BUFFER_SIZE)
