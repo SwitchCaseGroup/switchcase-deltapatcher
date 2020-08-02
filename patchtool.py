@@ -145,12 +145,12 @@ class PatchTool:
             map[dst_filename].append(dst_filename)
         for src_filename in self.src_files:
             extension = src_filename.rfind('.')
-            if extension != -1 and src_filename[extension+1:] in self.split:
+            if extension != -1 and src_filename[extension + 1:] in self.split:
                 dst_filenames = map[src_filename[:extension]]
                 if len(dst_filenames):
                     yield (src_filename, dst_filenames)
             elif src_filename in self.dst_files:
-                yield (src_filename, [ src_filename ])
+                yield (src_filename, [src_filename])
         return map
 
     def get_extension(self, filename):
@@ -389,7 +389,7 @@ class XDelta3:
             if patch.pch_filename:
                 pch_hash = perform_hash(self.verbose, patch.pch_filename)
                 if patch.pch_sha1 != pch_hash:
-                    self.error(f'Hash mismatch for {self.pch_filename}')
+                    self.error(f'Hash mismatch for {patch.pch_filename}')
                 # apply the patch
                 self.apply_xdelta3(self.src_filename,
                                    patch.dst_filename, patch.pch_filename)
