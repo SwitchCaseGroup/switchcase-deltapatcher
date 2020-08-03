@@ -269,6 +269,11 @@ class PatchTool:
         local_manifest = defaultdict(dict)
         self.generate_hashes(local_manifest, ['src', 'dst'])
 
+        # validate against manifest and local src files
+        self.validate_manifest(local_manifest)
+        self.validate_src(local_manifest)
+
+    def validate_manifest(self, local_manifest):
         # validate all manifest src files exist in dst and hashes match
         for src_filename in self.manifest['dst']:
             if src_filename not in self.dst_files:
@@ -281,30 +286,32 @@ class PatchTool:
             if dst_filename not in self.manifest['dst']:
                 self.error(f'{dst_filename}: missing from manifest!')
 
-        # validate against src files if they were provided
-        if self.src:
-            # validate all src files exist in dst and hashes match
-            for src_filename in self.src_files:
-                if src_filename not in self.dst_files:
-                    self.error(f'{src_filename}: missing from {self.dst}')
-                elif local_manifest['src'][src_filename]['sha1'] != local_manifest['dst'][src_filename]['sha1']:
-                    self.error(f'{src_filename}: src/dst sha1 mismatch!')
+    def validate_src(self, local_manifest):
+        # skip if local src is not available
+        if not self.src:
+            return
+        # validate all src files exist in dst and hashes match
+        for src_filename in self.src_files:
+            if src_filename not in self.dst_files:
+                self.error(f'{src_filename}: missing from {self.dst}')
+            elif local_manifest['src'][src_filename]['sha1'] != local_manifest['dst'][src_filename]['sha1']:
+                self.error(f'{src_filename}: src/dst sha1 mismatch!')
 
-            # validate all dst files exist in src
-            for dst_filename in self.dst_files:
-                if dst_filename not in self.src_files:
-                    self.error(f'{dst_filename}: missing from {self.src}')
+        # validate all dst files exist in src
+        for dst_filename in self.dst_files:
+            if dst_filename not in self.src_files:
+                self.error(f'{dst_filename}: missing from {self.src}')
 
-            # generate local directory lists
-            src_dirs = [os.path.relpath(
-                filename, self.src) for filename in self.find_dirs(self.src)]
-            dst_dirs = [os.path.relpath(
-                filename, self.dst) for filename in self.find_dirs(self.dst)]
+        # generate local directory lists
+        src_dirs = [os.path.relpath(
+            filename, self.src) for filename in self.find_dirs(self.src)]
+        dst_dirs = [os.path.relpath(
+            filename, self.dst) for filename in self.find_dirs(self.dst)]
 
-            # validate exact dir structure
-            if src_dirs != dst_dirs:
-                diff = {k: dst_dirs[k] for k in set(dst_dirs) - set(src_dirs)}
-                self.error(f'{diff}')
+        # validate exact dir structure
+        if src_dirs != dst_dirs:
+            diff = {k: dst_dirs[k] for k in set(dst_dirs) - set(src_dirs)}
+            self.error(f'{diff}')
 
     def trace(self, str):
         trace(self.verbose, str)
