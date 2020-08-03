@@ -35,13 +35,6 @@ the apply command can be run again to resume patching.
 
 
 class PatchTool:
-    src = None
-    dst = None
-    pch = None
-    src_files = []
-    dst_files = []
-    pch_files = []
-
     def __init__(self, split, verbose):
         self.split = split
         self.verbose = verbose
@@ -52,6 +45,9 @@ class PatchTool:
         self.src = src
         self.dst = dst
         self.pch = pch
+        self.src_files = []
+        self.dst_files = []
+        self.pch_files = []
         # initialize directories
         self.trace(f'Preparing file information...')
         for dir in ['src', 'dst', 'pch']:

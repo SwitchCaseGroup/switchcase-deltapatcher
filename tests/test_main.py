@@ -10,7 +10,7 @@ import os
 import io
 
 from patchtool import PatchTool
-
+from itertools import product
 
 # for generating filenames
 class PatchToolTests(PatchTool):
@@ -156,6 +156,8 @@ class PatchToolTests(PatchTool):
         shutil.rmtree(os.path.abspath('dst'), ignore_errors=True)
         shutil.rmtree(os.path.abspath('out'), ignore_errors=True)
         shutil.rmtree(os.path.abspath('pch'), ignore_errors=True)
+        shutil.rmtree(os.path.abspath('inv'), ignore_errors=True)
+        shutil.rmtree(os.path.abspath('dsv'), ignore_errors=True)
         for (inplace, resilience) in [(False, False), (False, True), (True, False), (True, True)]:
             shutil.rmtree(os.path.abspath(self.get_out_dir(inplace, resilience)), ignore_errors=True)
 
@@ -212,6 +214,13 @@ def test_validate(patch_tool_tests, inplace, resilience):
 
 
 @pytest.mark.parametrize("inplace, resilience", [(False, False), (False, True), (True, False), (True, True)])
+def test_validate_manifest(patch_tool_tests, inplace, resilience):
+    out = patch_tool_tests.get_out_dir(inplace, resilience)
+    patch_tool_tests.initialize(None, out, 'pch')
+    patch_tool_tests.validate()
+
+
+@pytest.mark.parametrize("inplace, resilience", [(False, False), (False, True), (True, False), (True, True)])
 def test_diff(patch_tool_tests, inplace, resilience):
     out = patch_tool_tests.get_out_dir(inplace, resilience)
     patch_tool_tests.execute(['diff', '-q', '-r', 'dst', out])
@@ -225,3 +234,37 @@ def test_compare(patch_tool_tests):
                               'tar-patch.xdelta3', '-s'])
     patch_tool_tests.execute(['rm', f'src.tar', f'dst.tar', 'tar-patch.xdelta3'])
     print(str(int(patch_tool_tests.changed_bytes / 1024)).ljust(8) + "modified/added")
+
+
+@pytest.mark.parametrize("dir, type", product(["dsv", "inv", "manifest"], ["add", "modify", "remove"]))
+def test_validate_failure(patch_tool_tests, dir, type):
+    patch_tool_tests.execute(['rm', '-rf', 'dsv'])
+    patch_tool_tests.execute(['rm', '-rf', 'inv'])
+    patch_tool_tests.execute(['cp', '-R', f'dst', 'dsv'])
+    patch_tool_tests.execute(['cp', '-R', f'dst', 'inv'])
+    patch_tool_tests.initialize('dsv', 'inv', 'pch')
+    with pytest.raises(ValueError):
+        if dir == "manifest":
+            with open(os.path.join('pch', 'manifest.json'), 'r') as inpfile:
+                local_manifest = json.load(inpfile)
+            if type == "add":
+                local_manifest["dst"]["test/bogus"] = {
+                    "sha1": "bogus"
+                }
+            elif type == "modify":
+                local_manifest["dst"][patch_tool_tests.dst_files[0]]["sha1"] = "bogus"
+            elif type == "remove":
+                del local_manifest["dst"][patch_tool_tests.dst_files[0]]
+            with open(os.path.join('pch', 'manifest.json'), 'w') as outfile:
+                json.dump(local_manifest, outfile, indent=4)
+        else:
+            if type == "add":
+                with open(os.path.join(dir, 'added'), "wt") as outfile:
+                    print("testing", file=outfile)
+            elif type == "modify":
+                with open(os.path.join(dir, patch_tool_tests.dst_files[0]), "wt") as outfile:
+                    print("modified", file=outfile)
+            elif type == "remove":
+                os.remove(os.path.join(dir, patch_tool_tests.dst_files[0]))
+        patch_tool_tests.initialize('dsv', 'inv', 'pch')
+        patch_tool_tests.validate()
