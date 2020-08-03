@@ -373,7 +373,7 @@ class XDelta3:
                     atomic_replace(patch.dst_filename, patch.pch_filename)
                     patch.pch_sha1 = patch.dst_sha1
         except:
-            self.exception = str(sys.exc_info()[0])
+            self.exception = str(sys.exc_info())
         return self
 
     def apply_xdelta3(self, src_filename, dst_filename, pch_filename):
@@ -419,7 +419,7 @@ class XDelta3:
                     self.trace(f'Copying {self.src_filename}...')
                     atomic_replace(self.src_filename, patch.dst_filename)
         except:
-            self.exception = str(sys.exc_info()[0])
+            self.exception = str(sys.exc_info())
 
         return self
 
