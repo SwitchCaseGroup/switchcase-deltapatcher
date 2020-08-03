@@ -35,21 +35,23 @@ the apply command can be run again to resume patching.
 
 
 class PatchTool:
-    def __init__(self, src, dst, pch, split, verbose):
+    src = None
+    dst = None
+    pch = None
+    src_files = []
+    dst_files = []
+    pch_files = []
+
+    def __init__(self, split, verbose):
+        self.split = split
+        self.verbose = verbose
+        self.manifest = defaultdict(dict)
+        self.pool = multiprocessing.Pool(processes=multiprocessing.cpu_count())
+
+    def initialize(self, src, dst, pch):
         self.src = src
         self.dst = dst
         self.pch = pch
-        self.src_files = []
-        self.dst_files = []
-        self.pch_files = []
-        self.split = split
-        self.verbose = verbose
-        # initialize blank manifest
-        self.manifest = defaultdict(dict)
-        # prepare to process on each of the system's cpus
-        self.pool = multiprocessing.Pool(processes=multiprocessing.cpu_count())
-
-    def initialize(self):
         # initialize directories
         self.trace(f'Preparing file information...')
         for dir in ['src', 'dst', 'pch']:
@@ -500,7 +502,6 @@ if __name__ == "__main__":
     arg_parser.add_argument('-v', '--verbose', dest='verbose',
                             action="store_true", help='increase verbosity')
     args = arg_parser.parse_args()
-    patch_tool = PatchTool(args.src, args.dst, args.pch,
-                           args.split, args.verbose)
-    patch_tool.initialize()
+    patch_tool = PatchTool(args.split, args.verbose)
+    patch_tool.initialize(args.src, args.dst, args.pch)
     getattr(globals()['PatchTool'], args.command)(patch_tool)

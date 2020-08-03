@@ -29,8 +29,7 @@ class PatchToolTests(PatchTool):
     chance_add = (60, 70)
 
     def __init__(self):
-        super().__init__('src', 'dst', 'pch', [
-            'uasset', 'umap'], verbose=False)
+        super().__init__( ['uasset', 'umap'], verbose=False)
         # repeatability
         random.seed(0)
         # configure test directories
@@ -49,7 +48,7 @@ class PatchToolTests(PatchTool):
         self.generate_random(self.src, self.target_size)
         self.generate_random(self.pch, self.target_size)
         self.generate_random(self.out, self.target_size)
-        self.initialize()
+        self.initialize('src', 'dst', 'pch')
         self.permute_dir(self.src, self.dst, self.src_files)
 
     def generate_random(self, path, size):
@@ -167,18 +166,12 @@ def patch_tool_tests():
 
 
 def test_prepare(patch_tool_tests):
-    patch_tool_tests.src = 'src'
-    patch_tool_tests.dst = 'dst'
-    patch_tool_tests.pch = 'pch'
-    patch_tool_tests.initialize()
+    patch_tool_tests.initialize('src', 'dst', 'pch')
     patch_tool_tests.prepare()
 
 
 def test_generate(patch_tool_tests):
-    patch_tool_tests.src = 'src'
-    patch_tool_tests.dst = 'dst'
-    patch_tool_tests.pch = 'pch'
-    patch_tool_tests.initialize()
+    patch_tool_tests.initialize('src', 'dst', 'pch')
     patch_tool_tests.generate()
 
 
@@ -187,19 +180,19 @@ def test_apply(patch_tool_tests, inplace, resilience):
     out = patch_tool_tests.get_out_dir(inplace, resilience)
     if inplace or resilience:
         patch_tool_tests.execute(['cp', '-R', f'src', out])
-    patch_tool_tests.src = out if inplace else 'src'
-    patch_tool_tests.dst = out
-    patch_tool_tests.pch = 'pch'
+    src = out if inplace else 'src'
+    dst = out
+    pch = 'pch'
     if resilience:
         missing = []
-        patch_tool_tests.initialize()
+        patch_tool_tests.initialize(src, dst, pch)
         for filename in patch_tool_tests.src_files:
             src_filename = os.path.join(patch_tool_tests.src, filename)
             os.rename(src_filename, f'{src_filename}.missing')
             missing.append(src_filename)
         while len(missing):
             try:
-                patch_tool_tests.initialize()
+                patch_tool_tests.initialize(src, dst, pch)
                 patch_tool_tests.apply()
             except:
                 size = len(missing) / 2
@@ -207,17 +200,14 @@ def test_apply(patch_tool_tests, inplace, resilience):
                     src_filename = missing.pop()
                     os.rename(f'{src_filename}.missing', src_filename)
 
-    patch_tool_tests.initialize()
+    patch_tool_tests.initialize(src, dst, pch)
     patch_tool_tests.apply()
 
 
 @pytest.mark.parametrize("inplace, resilience", [(False, False), (False, True), (True, False), (True, True)])
 def test_validate(patch_tool_tests, inplace, resilience):
     out = patch_tool_tests.get_out_dir(inplace, resilience)
-    patch_tool_tests.src = 'dst'
-    patch_tool_tests.dst = out
-    patch_tool_tests.pch = 'pch'
-    patch_tool_tests.initialize()
+    patch_tool_tests.initialize('dst', out, 'pch')
     patch_tool_tests.validate()
 
 
