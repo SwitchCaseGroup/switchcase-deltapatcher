@@ -227,19 +227,25 @@ class PatchTool:
                 yield xdelta3
 
     def find_files(self, path):
-        if os.path.exists(path):
-            if not os.path.isfile(path):
-                for current in os.listdir(path):
-                    yield from self.find_files(os.path.join(path, current))
-            else:
-                yield path
+        try:
+            if os.path.exists(path):
+                if not os.path.isfile(path):
+                    for current in os.listdir(path):
+                        yield from self.find_files(os.path.join(path, current))
+                else:
+                    yield path
+        except FileNotFoundError:
+            pass
 
     def find_dirs(self, path):
-        if os.path.exists(path):
-            if not os.path.isfile(path):
-                yield path
-                for current in os.listdir(path):
-                    yield from self.find_dirs(os.path.join(path, current))
+        try:
+            if os.path.exists(path):
+                if not os.path.isfile(path):
+                    yield path
+                    for current in os.listdir(path):
+                        yield from self.find_dirs(os.path.join(path, current))
+        except FileNotFoundError:
+            pass
 
     def generate_hashes(self, manifest, dirs):
         # queue the hashes
@@ -362,7 +368,7 @@ class XDelta3:
                         "-s", self.src_filename, patch.dst_filename, patch.pch_filename
                     ]
                     self.trace(' '.join(command))
-                    subprocess.check_output(command, universal_newlines=True)
+                    execute(command)
                     # hash the patch file
                     patch.pch_sha1 = perform_hash(
                         self.verbose, patch.pch_filename)
@@ -382,7 +388,7 @@ class XDelta3:
             "-s", src_filename, pch_filename, tmp_filename
         ]
         self.trace(' '.join(command))
-        subprocess.check_output(command, universal_newlines=True)
+        execute(command)
         # perform atomic file copy/replace
         atomic_replace(tmp_filename, dst_filename)
         # remove temporary file
@@ -421,43 +427,46 @@ class XDelta3:
 
         return self
 
-# log message if verbose is enabled
-
 
 def trace(verbose, text):
     if verbose:
         print(text)
 
-# error resillient remove
-
 
 def remove(filename):
-    if os.path.exists(filename):
-        os.remove(filename)
-
-# error resilient makedirs
+    try:
+        if os.path.exists(filename):
+            os.remove(filename)
+    except FileNotFoundError:
+        pass
 
 
 def makedirs(dir):
     os.makedirs(os.path.abspath(dir), exist_ok=True)
 
-# generate hash of filename
+
+def execute(command):
+    try:
+        subprocess.check_output(command, universal_newlines=True)
+    except subprocess.CalledProcessError as e:
+        print(f'{command}')
+        print(f'{e.stdout}')
+        raise
 
 
 def perform_hash(verbose, filename):
     trace(verbose, f'Hashing {filename}...')
     hash = hashlib.sha1()
-    if os.path.exists(filename):
+    try:
         with open(filename, 'rb') as inpfile:
             block = inpfile.read(io.DEFAULT_BUFFER_SIZE)
             while len(block) != 0:
                 hash.update(block)
                 block = inpfile.read(io.DEFAULT_BUFFER_SIZE)
         return hash.hexdigest()
-
+    except:
+        pass
     return ""
-
-# perform atomic file replace
 
 
 def atomic_replace(src, dst):
