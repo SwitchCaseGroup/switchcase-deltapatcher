@@ -13,7 +13,6 @@ from patchtool import PatchTool
 from itertools import product
 
 
-# for generating filenames
 class PatchToolTests(PatchTool):
     # test configuration
     target_size = 8 * 1024 * 1024
