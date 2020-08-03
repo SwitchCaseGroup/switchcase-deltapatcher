@@ -248,20 +248,19 @@ class PatchTool:
                 yield xdelta3
 
     def find_files(self, path):
-        try:
+        if os.path.exists(path):
             if not os.path.isfile(path):
                 for current in os.listdir(path):
                     yield from self.find_files(os.path.join(path, current))
             else:
                 yield path
-        except FileNotFoundError:
-            pass
 
     def find_dirs(self, path):
-        if not os.path.isfile(path):
-            yield path
-            for current in os.listdir(path):
-                yield from self.find_dirs(os.path.join(path, current))
+        if os.path.exists(path):
+            if not os.path.isfile(path):
+                yield path
+                for current in os.listdir(path):
+                    yield from self.find_dirs(os.path.join(path, current))
 
     def generate_hashes(self, manifest, dirs):
         # queue the hashes
@@ -436,19 +435,14 @@ def trace(verbose, text):
 
 
 def remove(filename):
-    try:
+    if os.path.exists(filename):
         os.remove(filename)
-    except FileNotFoundError:
-        pass
 
 # error resilient makedirs
 
 
 def makedirs(dir):
-    try:
-        os.makedirs(os.path.abspath(dir), exist_ok=True)
-    except FileNotFoundError:
-        pass
+    os.makedirs(os.path.abspath(dir), exist_ok=True)
 
 # generate hash of filename
 
