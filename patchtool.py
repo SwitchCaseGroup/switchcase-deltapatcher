@@ -73,16 +73,15 @@ class PatchTool:
         self.trace(f'Cleaning {self.pch}...')
         self.cleandir(self.pch, self.pch_files)
 
-        # generate directory whitelist
-        self.manifest['dir'] = [os.path.relpath(
-            filename, self.dst) for filename in self.find_dirs(self.dst)]
-
-        # create pch directories
-        for dir in self.manifest['dir']:
+        # generate directory whitelist and create pch directory structure
+        self.manifest['dir'] = []
+        for dir in [os.path.relpath(dir, self.dst) for dir in self.find_dirs(self.dst)]:
+            self.manifest['dir'].append(dir)
             makedirs(os.path.join(self.pch, dir))
 
         # perform patch generation in parallel and process the results as they arrive
         for xdelta3 in self.pool.imap_unordered(XDelta3.generate_patches, self.generate_queue()):
+            # handle caught exception in subprocess
             if xdelta3.exception:
                 self.error(xdelta3.exception)
             # update manifest with src hash, if the patch(es) had a source
@@ -165,42 +164,25 @@ class PatchTool:
                 yield (src_filename, [src_filename])
         return map
 
-    def get_extension(self, filename):
-        extension_offs = filename.rfind('.')
-        return filename[extension_offs + 1:] if extension_offs != -1 else ''
-
-    def get_prefix(self, filename):
-        extension_offs = filename.rfind('.')
-        return filename[:extension_offs:] if extension_offs != -1 else ''
-
-    def merged(self, src_filename, dst_filename):
-        # files are themselves, of course
-        if src_filename == dst_filename:
-            return True
-        # handle our known split file extensions
-        if self.get_extension(src_filename) in self.split:
-            if os.path.dirname(src_filename) == os.path.dirname(dst_filename):
-                if self.get_prefix(src_filename) == self.get_prefix(dst_filename):
-                    return True
-        return False
-
     def apply(self):
         # read the manifest file
         self.trace(f'Reading manifest...')
         with open(os.path.join(self.pch, 'manifest.json'), 'r') as inpfile:
             self.manifest = json.load(inpfile)
 
-        # create directories
+        # create destination directories
         for dir in self.manifest['dir']:
             makedirs(os.path.join(self.dst, dir))
 
         # perform patching in parallel (dependent files)
         for xdelta3 in self.pool.imap_unordered(XDelta3.apply_patches, self.apply_queue(False)):
+            # handle caught exception in subprocess
             if xdelta3.exception:
                 self.error(xdelta3.exception)
 
         # perform patching in parallel (dependencies)
         for xdelta3 in self.pool.imap_unordered(XDelta3.apply_patches, self.apply_queue(True)):
+            # handle caught exception in subprocess
             if xdelta3.exception:
                 self.error(xdelta3.exception)
 
@@ -312,8 +294,7 @@ class PatchTool:
             self.error(f'{diff}')
 
     def trace(self, str):
-        if self.verbose:
-            print(str)
+        trace(self.verbose, str)
 
     def error(self, str):
         # flush the old pool which could have lingering subprocesses
@@ -450,15 +431,15 @@ def makedirs(dir):
 def perform_hash(verbose, filename):
     trace(verbose, f'Hashing {filename}...')
     hash = hashlib.sha1()
-    try:
+    if os.path.exists(filename):
         with open(filename, 'rb') as inpfile:
             block = inpfile.read(io.DEFAULT_BUFFER_SIZE)
             while len(block) != 0:
                 hash.update(block)
                 block = inpfile.read(io.DEFAULT_BUFFER_SIZE)
-    except:
-        pass
-    return hash.hexdigest()
+        return hash.hexdigest()
+
+    return ""
 
 # perform atomic file replace
 
