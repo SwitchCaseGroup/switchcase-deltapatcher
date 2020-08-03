@@ -246,11 +246,14 @@ class PatchTool:
                 yield xdelta3
 
     def find_files(self, path):
-        if not os.path.isfile(path):
-            for current in os.listdir(path):
-                yield from self.find_files(os.path.join(path, current))
-        else:
-            yield path
+        try:
+            if not os.path.isfile(path):
+                for current in os.listdir(path):
+                    yield from self.find_files(os.path.join(path, current))
+            else:
+                yield path
+        except FileNotFoundError:
+            pass
 
     def find_dirs(self, path):
         if not os.path.isfile(path):
@@ -433,8 +436,7 @@ def trace(verbose, text):
 def remove(filename):
     try:
         os.remove(filename)
-    except OSError as e:
-        print(filename, e)
+    except FileNotFoundError:
         pass
 
 # error resilient makedirs
@@ -443,8 +445,7 @@ def remove(filename):
 def makedirs(dir):
     try:
         os.makedirs(os.path.abspath(dir), exist_ok=True)
-    except OSError as e:
-        print(dir, e)
+    except FileNotFoundError:
         pass
 
 # generate hash of filename
