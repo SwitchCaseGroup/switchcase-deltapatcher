@@ -314,19 +314,20 @@ class PatchTool:
         # generate local hashes
         self.trace(f'Generating hashes...')
         local_manifest = defaultdict(dict)
-        self.generate_hashes(local_manifest, ['src', 'dst'])
+        self.generate_hashes(local_manifest, ['src', 'dst', 'pch'])
 
         # validate against manifest and local src files
         self.validate_manifest(local_manifest)
         self.validate_src(local_manifest)
 
     def validate_manifest(self, local_manifest):
-        # validate all manifest dst files exist in manifest dst and hashes match
-        for (dst_filename, _) in self.iterate_manifest('dst'):
-            if dst_filename not in self.dst_files:
-                self.error(f'{dst_filename}: missing from {self.dst}')
-            if local_manifest['dst'][dst_filename]['sha1'] != self.manifest['dst'][dst_filename]['sha1']:
-                self.error(f'{dst_filename}: manifest sha1 mismatch!')
+        # validate all manifest dst/pch files exist locally and hashes match
+        for dir in ['dst', 'pch']:
+            for (filename, _) in self.iterate_manifest(dir):
+                if filename not in getattr(self, f'{dir}_files'):
+                    self.error(f'{filename}: missing from {getattr(self, dir)}')
+                if local_manifest[dir][filename]['sha1'] != self.manifest[dir][filename]['sha1']:
+                    self.error(f'{filename}: manifest sha1 mismatch!')
 
         # validate all dst files exist in manifest dst
         for dst_entry in self.dst_files.values():
