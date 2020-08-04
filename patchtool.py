@@ -41,6 +41,10 @@ class PatchTool:
         self.manifest = defaultdict(dict)
         self.pool = multiprocessing.Pool(processes=multiprocessing.cpu_count())
 
+    def __del__(self):
+        self.pool.close()
+        self.pool.join()
+
     def initialize(self, src, dst, pch):
         self.src = src
         self.dst = dst
@@ -48,6 +52,11 @@ class PatchTool:
         self.src_files = {}
         self.dst_files = {}
         self.pch_files = {}
+        # flush the old pool which could have lingering subprocesses
+        if self.pool:
+            self.pool.close()
+            self.pool.join()
+            self.pool = multiprocessing.Pool(processes=multiprocessing.cpu_count())
         # initialize directories
         self.trace(f'Preparing file information...')
         for dir in ['src', 'dst', 'pch']:
@@ -296,7 +305,7 @@ class PatchTool:
             if local_manifest['dst'][src_filename]['sha1'] != self.manifest['dst'][src_filename]['sha1']:
                 self.error(f'{src_filename}: manifest sha1 mismatch!')
 
-        # validate all dst files exist in manifest src
+        # validate all dst files exist in manifest dst
         for dst_entry in self.dst_files.values():
             if dst_entry.name not in self.manifest['dst']:
                 self.error(f'{dst_entry.name}: missing from manifest!')
@@ -328,8 +337,6 @@ class PatchTool:
         trace(self.verbose, str)
 
     def error(self, str):
-        # flush the old pool which could have lingering subprocesses
-        self.pool = multiprocessing.Pool(processes=multiprocessing.cpu_count())
         raise ValueError(str)
 
 
@@ -385,33 +392,17 @@ class XDelta3:
                 # create the xdelta3 patch file
                 self.trace(f'Creating delta for {patch.dst_filename}...')
                 command = [
-                    "xdelta3", "-e", "-9", "-f",
-                    "-s", self.src_filename, patch.dst_filename, patch.pch_filename
+                    "xdelta3", "-e", "-9", "-f", "-c",
+                    "-s", self.src_filename, patch.dst_filename
                 ]
                 self.trace(' '.join(command))
-                execute(command)
-                # hash the patch file
-                patch.pch_sha1 = perform_hash(
-                    self.verbose, patch.pch_filename)
+                pipe = execute_pipe(command)
+                patch.pch_sha1 = self.atomic_replace_pipe(patch.pch_filename, pipe)
             # if there is no source, copy the file itself as the patch
             elif not self.src_filename:
-                atomic_replace(patch.dst_filename, patch.pch_filename)
+                self.atomic_replace(patch.dst_filename, patch.pch_filename)
                 patch.pch_sha1 = patch.dst_sha1
         return self
-
-    def apply_xdelta3(self, src_filename, dst_filename, pch_filename):
-        tmp_filename = f'{dst_filename}.patched'
-        # apply xdelta3 patch to temporary file
-        command = [
-            "xdelta3", "-d", "-f",
-            "-s", src_filename, pch_filename, tmp_filename
-        ]
-        self.trace(' '.join(command))
-        execute(command)
-        # perform atomic file copy/replace
-        atomic_replace(tmp_filename, dst_filename)
-        # remove temporary file
-        remove(tmp_filename)
 
     def apply_patches(self):
         # lazily hash source only once and only if/when necessary
@@ -427,20 +418,73 @@ class XDelta3:
             if not src_hash:
                 src_hash = perform_hash(self.verbose, self.src_filename)
             if self.src_sha1 != src_hash:
-                self.error(f'Hash mismatch for {self.src_filename} {patch.dst_sha1} {dst_hash}, {self.src_sha1}, {src_hash}')
+                self.error(f'Hash mismatch for {self.src_filename}')
             # validate patch hash
             if patch.pch_filename:
                 pch_hash = perform_hash(self.verbose, patch.pch_filename)
                 if patch.pch_sha1 != pch_hash:
                     self.error(f'Hash mismatch for {patch.pch_filename}')
                 # apply the patch
-                self.apply_xdelta3(self.src_filename, patch.dst_filename, patch.pch_filename)
+                self.apply_xdelta3(self.src_filename, patch)
             # copy file directly
             else:
                 self.trace(f'Copying {self.src_filename}...')
-                atomic_replace(self.src_filename, patch.dst_filename)
+                self.atomic_replace(self.src_filename, patch.dst_filename)
 
         return self
+
+    def apply_xdelta3(self, src_filename, patch):
+        # apply xdelta3 patch to temporary file
+        command = [
+            "xdelta3", "-d", "-f", "-c",
+            "-s", src_filename, patch.pch_filename
+        ]
+        self.trace(' '.join(command))
+        pipe = execute_pipe(command)
+        self.atomic_replace_pipe(patch.dst_filename, pipe, patch.dst_sha1)
+
+    def atomic_replace(self, src, dst):
+        tmp = f'{dst}.tmp'
+
+        # copy input file to temporary file
+        with open(src, 'rb') as inpfile:
+            with open(tmp, 'wb') as outfile:
+                block = inpfile.read(io.DEFAULT_BUFFER_SIZE)
+                while len(block) != 0:
+                    outfile.write(block)
+                    block = inpfile.read(io.DEFAULT_BUFFER_SIZE)
+                outfile.flush()
+                os.fsync(outfile.fileno())
+
+        # perform atomic replace of temporary file
+        os.replace(tmp, dst)
+
+    def atomic_replace_pipe(self, dst, pipe, sha1_verify=None):
+        tmp = f'{dst}.tmp'
+
+        size = 0
+        # copy pipe to temporary file while hashing its contents
+        hash = hashlib.sha1()
+        with open(tmp, 'wb') as outfile:
+            block = pipe.read(io.DEFAULT_BUFFER_SIZE)
+            while len(block) != 0:
+                size += len(block)
+                hash.update(block)
+                outfile.write(block)
+                block = pipe.read(io.DEFAULT_BUFFER_SIZE)
+            outfile.flush()
+            os.fsync(outfile.fileno())
+            outfile.close()
+
+        # validate the digest
+        digest = hash.hexdigest()
+        if sha1_verify and sha1_verify != digest:
+            self.error(f'Hash mismatch for {dst}!')
+
+        # perform atomic replace of temporary file
+        os.replace(tmp, dst)
+
+        return digest
 
 
 def trace(verbose, text):
@@ -467,9 +511,10 @@ def makedirs(dir):
     os.makedirs(os.path.abspath(dir), exist_ok=True)
 
 
-def execute(command):
+def execute_pipe(command):
     try:
-        subprocess.check_output(command, universal_newlines=True)
+        p = subprocess.Popen(command, stdout=subprocess.PIPE)
+        return p.stdout
     except subprocess.CalledProcessError as e:
         print(f'{command}')
         print(f'{e.stdout}')
@@ -489,20 +534,6 @@ def perform_hash(verbose, filename):
     except:
         pass
     return ""
-
-
-def atomic_replace(src, dst):
-    tmp = f'{dst}.tmp'
-    # perform atomic file copy/replace
-    with open(src, 'rb') as inpfile:
-        with open(tmp, 'wb') as outfile:
-            block = inpfile.read(io.DEFAULT_BUFFER_SIZE)
-            while len(block) != 0:
-                outfile.write(block)
-                block = inpfile.read(io.DEFAULT_BUFFER_SIZE)
-            outfile.flush()
-            os.fsync(outfile.fileno())
-    os.replace(tmp, dst)
 
 
 if __name__ == "__main__":
