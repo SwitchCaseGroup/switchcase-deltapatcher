@@ -266,10 +266,10 @@ def test_validate_failure(patch_tool_tests, dir, type):
                 del local_manifest["dst"][random_file]
             elif type == "permissions":
                 current = local_manifest["dst"][random_file]["mode"]
-                if current & stat.S_IWRITE:
-                    local_manifest["dst"][random_file]["mode"] = stat.S_IREAD
+                if current & stat.S_IRWXO:
+                    local_manifest["dst"][random_file]["mode"] = stat.S_IRWXU | stat.S_IRWXG
                 else:
-                    local_manifest["dst"][random_file]["mode"] = stat.S_IWRITE | stat.S_IREAD
+                    local_manifest["dst"][random_file]["mode"] = stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO
             with open(os.path.join('pch', 'manifest.json'), 'w') as outfile:
                 json.dump(local_manifest, outfile, indent=4)
         else:
@@ -284,9 +284,9 @@ def test_validate_failure(patch_tool_tests, dir, type):
             elif type == "permissions":
                 full_path = os.path.join(dir, random_file)
                 current = stat.S_IMODE(os.stat(full_path).st_mode)
-                if current & stat.S_IWRITE:
-                    os.chmod(full_path, stat.S_IREAD)
+                if current & stat.S_IRWXO:
+                    os.chmod(full_path, stat.S_IRWXU | stat.S_IRWXG)
                 else:
-                    os.chmod(full_path, stat.S_IWRITE | stat.S_IREAD)
+                    os.chmod(full_path, stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
         patch_tool_tests.initialize('dsv', 'inv', 'pch')
         patch_tool_tests.validate()
