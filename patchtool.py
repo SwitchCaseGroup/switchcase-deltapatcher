@@ -7,6 +7,7 @@ import multiprocessing
 import subprocess
 import argparse
 import hashlib
+import signal
 import shutil
 import json
 import sys
@@ -39,9 +40,11 @@ class PatchTool:
         self.split = split
         self.verbose = verbose
         self.manifest = defaultdict(dict)
-        self.pool = multiprocessing.Pool(processes=multiprocessing.cpu_count())
+        self.pool = None
+        self.create_pool()
 
     def __del__(self):
+        self.pool.terminate()
         self.pool.close()
         self.pool.join()
 
@@ -52,11 +55,7 @@ class PatchTool:
         self.src_files = {}
         self.dst_files = {}
         self.pch_files = {}
-        # flush the old pool which could have lingering subprocesses
-        if self.pool:
-            self.pool.close()
-            self.pool.join()
-            self.pool = multiprocessing.Pool(processes=multiprocessing.cpu_count())
+        self.create_pool()
         # initialize directories
         self.trace(f'Preparing file information...')
         for dir in ['src', 'dst', 'pch']:
@@ -68,6 +67,16 @@ class PatchTool:
                 makedirs(directory)
                 # find all files in each directory
                 setattr(self, f'{dir}_files', {entry.name: entry for entry in self.scantree(directory, directory)})
+
+    def create_pool(self):
+        # flush the old pool which could have lingering subprocesses
+        if self.pool:
+            self.pool.close()
+            self.pool.join()
+        # create pool, disabling SIGINT so parent process can handle it
+        handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
+        self.pool = multiprocessing.Pool(processes=multiprocessing.cpu_count())
+        signal.signal(signal.SIGINT, handler)
 
     def generate(self):
         # cleanup the patch directory
@@ -555,6 +564,10 @@ if __name__ == "__main__":
     arg_parser.add_argument('-v', '--verbose', dest='verbose',
                             action="store_true", help='increase verbosity')
     args = arg_parser.parse_args()
-    patch_tool = PatchTool(args.split, args.verbose)
-    patch_tool.initialize(args.src, args.dst, args.pch)
-    getattr(globals()['PatchTool'], args.command)(patch_tool)
+
+    try:
+        patch_tool = PatchTool(args.split, args.verbose)
+        patch_tool.initialize(args.src, args.dst, args.pch)
+        getattr(globals()['PatchTool'], args.command)(patch_tool)
+    except KeyboardInterrupt:
+        pass
