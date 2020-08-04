@@ -15,6 +15,7 @@ import sys
 import os
 import io
 
+from datetime import datetime
 from functools import partial
 from collections import defaultdict
 
@@ -119,6 +120,17 @@ class PatchTool:
                 del self.manifest['src'][src_filename]['xdelta3']
                 if src_filename not in self.manifest['dst']:
                     del self.manifest['src'][src_filename]
+
+        # write manifest metadata
+        self.manifest["metadata"] = {
+            "manifest": {
+                "created": str(datetime.now()),
+                "version": 1.0,
+                "src": self.src,
+                "dst": self.dst,
+                "pch": self.pch
+            }
+        }
 
         # write the manifest file
         self.trace(f'Writing manifest...')

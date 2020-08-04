@@ -27,7 +27,7 @@ Example to generate patch directory, apply it and then validate:
 Patching can also be done in-place, over top of the source directory:
   patchtool.py generate -s src_dir -d dst_dir -p patch_dir
   patchtool.py apply -s src_dir -d src_dir -p patch_dir
-  patchtool.py validate -s dst_dir -d src_dir -p patch_dir
+  patchtool.py validate -d src_dir -p patch_dir
 
 Patch apply uses atomic file operations. If the process is interrupted,
 the apply command can be run again to resume patching.

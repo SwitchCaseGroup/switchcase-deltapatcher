@@ -192,7 +192,7 @@ def test_generate(patch_tool_tests):
 def test_apply(patch_tool_tests, inplace, resilience):
     out = patch_tool_tests.get_out_dir(inplace, resilience)
     if inplace or resilience:
-        patch_tool_tests.execute(['cp', '-R', f'src', out])
+        shutil.copytree('src', out)
     src = out if inplace else 'src'
     dst = out
     pch = 'pch'
@@ -236,22 +236,12 @@ def test_diff(patch_tool_tests, inplace, resilience):
     patch_tool_tests.execute(['diff', '-q', '-r', 'dst', out])
 
 
-def test_compare(patch_tool_tests):
-    patch_tool_tests.execute(['tar', 'cf', f'src.tar', 'src'])
-    patch_tool_tests.execute(['tar', 'cf', f'dst.tar', 'dst'])
-    patch_tool_tests.execute(['xdelta3', '-e', '-9', '-f', '-s', f'src.tar', f'dst.tar', 'tar-patch.xdelta3'])
-    patch_tool_tests.execute(['du', 'src', 'dst', 'pch',
-                              'tar-patch.xdelta3', '-s'])
-    patch_tool_tests.execute(['rm', f'src.tar', f'dst.tar', 'tar-patch.xdelta3'])
-    print(str(int(patch_tool_tests.changed_bytes / 1024)).ljust(8) + "modified/added")
-
-
 @pytest.mark.parametrize("dir, type", product(["manifest", "dsv", "inv"], ["add", "modify", "remove", "permissions"]))
 def test_validate_failure(patch_tool_tests, dir, type):
-    patch_tool_tests.execute(['rm', '-rf', 'dsv'])
-    patch_tool_tests.execute(['rm', '-rf', 'inv'])
-    patch_tool_tests.execute(['cp', '-R', f'dst', 'dsv'])
-    patch_tool_tests.execute(['cp', '-R', f'dst', 'inv'])
+    shutil.rmtree('dsv', ignore_errors=True)
+    shutil.rmtree('inv', ignore_errors=True)
+    shutil.copytree('dst', 'dsv')
+    shutil.copytree('dst', 'inv')
     patch_tool_tests.initialize('dsv', 'inv', 'pch')
     with pytest.raises(ValueError):
         random_file = random.choice(list(patch_tool_tests.iterate_files('dst'))).name
