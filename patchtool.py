@@ -357,6 +357,37 @@ class PatchTool:
             if dst_entry.name not in self.src_files:
                 self.error(f'{dst_entry.name}: missing from {self.src}')
 
+    def analyze(self):
+        # populate src/dst manifest with files/dirs metadata
+        for dir in ['src', 'dst']:
+            for entry in getattr(self, f'{dir}_files').values():
+                self.manifest[dir][entry.name] = {attr: getattr(entry, attr) for attr in ['uid', 'gid', 'mode', 'size', 'mtime']}
+
+        # determine what savings there would be with case-insensitive src/dst keying
+        self.trace(f'Searching for case insensitive src/dst matches...')
+        case_insensitive_size = 0
+        upper = {src_entry.upper(): src_entry for src_entry in self.manifest['src']}
+        for dst_entry in self.manifest['dst']:
+            if dst_entry.upper() in upper and dst_entry not in self.manifest['src']:
+                file_size = self.manifest["dst"][dst_entry]["size"]
+                self.trace(f'{dst_entry} => {upper[dst_entry.upper()]}: {file_size:,} bytes')
+                case_insensitive_size += file_size
+
+        # determine what savings there would be with filename matching
+        self.trace(f'Searching for potentially moved files...')
+        src_filenames = {os.path.basename(entry.path): entry for entry in self.iterate_files('dst')}
+        dst_filenames = {os.path.basename(entry.path): entry for entry in self.iterate_files('src')}
+        moved_file_size = 0
+        for (src_filename, src_entry) in src_filenames.items():
+            if src_filename in dst_filenames:
+                dst_entry = dst_filenames[src_filename]
+                if src_entry.name != dst_entry.name:
+                    self.trace(f'{src_entry.name} => {dst_entry.name}: {dst_entry.size:,} bytes')
+                    moved_file_size += src_entry.size
+
+        print(f'Case insensitive savings could be at most {case_insensitive_size:,} bytes')
+        print(f'Moved file savings could be at most {moved_file_size:,} bytes')
+
     def trace(self, str):
         trace(self.verbose, str)
 
@@ -560,7 +591,7 @@ def perform_hash(verbose, filename):
 
 if __name__ == "__main__":
     # currently supported CLI commands
-    commands = ["generate", "apply", "validate"]
+    commands = ["generate", "apply", "validate", "analyze"]
     # parse command-line arguments and execute the command
     arg_parser = argparse.ArgumentParser(
         description=description, formatter_class=argparse.RawTextHelpFormatter)
