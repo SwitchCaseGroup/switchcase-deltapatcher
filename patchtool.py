@@ -84,9 +84,6 @@ class PatchTool:
 
         # perform patch generation in parallel and process the results as they arrive
         for xdelta3 in self.pool.imap_unordered(XDelta3.generate_patches, self.generate_queue()):
-            # handle caught exception in subprocess
-            if xdelta3.exception:
-                self.error(xdelta3.exception)
             # update manifest with src hash, if the patch(es) had a source
             if xdelta3.src_filename:
                 src_filename = os.path.relpath(xdelta3.src_filename, self.src)
@@ -174,16 +171,12 @@ class PatchTool:
             mkdir(os.path.join(self.dst, name), mode=entry['mode'])
 
         # perform patching in parallel (dependent files)
-        for xdelta3 in self.pool.imap_unordered(XDelta3.apply_patches, self.apply_queue(False)):
-            # handle caught exception in subprocess
-            if xdelta3.exception:
-                self.error(xdelta3.exception)
+        for _ in self.pool.imap_unordered(XDelta3.apply_patches, self.apply_queue(False)):
+            pass
 
         # perform patching in parallel (dependencies)
-        for xdelta3 in self.pool.imap_unordered(XDelta3.apply_patches, self.apply_queue(True)):
-            # handle caught exception in subprocess
-            if xdelta3.exception:
-                self.error(xdelta3.exception)
+        for _ in self.pool.imap_unordered(XDelta3.apply_patches, self.apply_queue(True)):
+            pass
 
         # apply file properties
         self.trace(f'Applying file properties...')
@@ -368,7 +361,6 @@ class XDelta3:
         self.src_filename = src_filename
         self.src_sha1 = None
         self.patches = []
-        self.exception = None
 
     def trace(self, text):
         if self.verbose:
@@ -381,33 +373,30 @@ class XDelta3:
         self.patches.append(patch)
 
     def generate_patches(self):
-        try:
-            # hash the source file
-            if self.src_filename:
-                self.src_sha1 = perform_hash(self.verbose, self.src_filename)
-            # process all of the potential patches
-            for patch in self.patches:
-                # hash the destination file
-                patch.dst_sha1 = perform_hash(self.verbose, patch.dst_filename)
-                # only apply patches when there's a source who's hash doesn't match destination
-                if self.src_filename and self.src_sha1 != patch.dst_sha1:
-                    # create the xdelta3 patch file
-                    self.trace(f'Creating delta for {patch.dst_filename}...')
-                    command = [
-                        "xdelta3", "-e", "-9", "-f",
-                        "-s", self.src_filename, patch.dst_filename, patch.pch_filename
-                    ]
-                    self.trace(' '.join(command))
-                    execute(command)
-                    # hash the patch file
-                    patch.pch_sha1 = perform_hash(
-                        self.verbose, patch.pch_filename)
-                # if there is no source, copy the file itself as the patch
-                elif not self.src_filename:
-                    atomic_replace(patch.dst_filename, patch.pch_filename)
-                    patch.pch_sha1 = patch.dst_sha1
-        except:
-            self.exception = str(sys.exc_info())
+        # hash the source file
+        if self.src_filename:
+            self.src_sha1 = perform_hash(self.verbose, self.src_filename)
+        # process all of the potential patches
+        for patch in self.patches:
+            # hash the destination file
+            patch.dst_sha1 = perform_hash(self.verbose, patch.dst_filename)
+            # only apply patches when there's a source who's hash doesn't match destination
+            if self.src_filename and self.src_sha1 != patch.dst_sha1:
+                # create the xdelta3 patch file
+                self.trace(f'Creating delta for {patch.dst_filename}...')
+                command = [
+                    "xdelta3", "-e", "-9", "-f",
+                    "-s", self.src_filename, patch.dst_filename, patch.pch_filename
+                ]
+                self.trace(' '.join(command))
+                execute(command)
+                # hash the patch file
+                patch.pch_sha1 = perform_hash(
+                    self.verbose, patch.pch_filename)
+            # if there is no source, copy the file itself as the patch
+            elif not self.src_filename:
+                atomic_replace(patch.dst_filename, patch.pch_filename)
+                patch.pch_sha1 = patch.dst_sha1
         return self
 
     def apply_xdelta3(self, src_filename, dst_filename, pch_filename):
@@ -425,35 +414,31 @@ class XDelta3:
         remove(tmp_filename)
 
     def apply_patches(self):
-        try:
-            # lazily hash source only once and only if/when necessary
-            src_hash = None
-            # process all of the patches
-            for patch in self.patches:
-                # check if dst already matches
-                dst_hash = perform_hash(self.verbose, patch.dst_filename)
-                if patch.dst_sha1 == dst_hash:
-                    self.trace(f'Skipping already matching {patch.dst_filename}')
-                    continue
-                # validate source hash
-                if not src_hash:
-                    src_hash = perform_hash(self.verbose, self.src_filename)
-                if self.src_sha1 != src_hash:
-                    self.error(f'Hash mismatch for {self.src_filename} {patch.dst_sha1} {dst_hash}, {self.src_sha1}, {src_hash}')
-                # validate patch hash
-                if patch.pch_filename:
-                    pch_hash = perform_hash(self.verbose, patch.pch_filename)
-                    if patch.pch_sha1 != pch_hash:
-                        self.error(f'Hash mismatch for {patch.pch_filename}')
-                    # apply the patch
-                    self.apply_xdelta3(self.src_filename,
-                                       patch.dst_filename, patch.pch_filename)
-                # copy file directly
-                else:
-                    self.trace(f'Copying {self.src_filename}...')
-                    atomic_replace(self.src_filename, patch.dst_filename)
-        except:
-            self.exception = str(sys.exc_info())
+        # lazily hash source only once and only if/when necessary
+        src_hash = None
+        # process all of the patches
+        for patch in self.patches:
+            # check if dst already matches
+            dst_hash = perform_hash(self.verbose, patch.dst_filename)
+            if patch.dst_sha1 == dst_hash:
+                self.trace(f'Skipping already matching {patch.dst_filename}')
+                continue
+            # validate source hash
+            if not src_hash:
+                src_hash = perform_hash(self.verbose, self.src_filename)
+            if self.src_sha1 != src_hash:
+                self.error(f'Hash mismatch for {self.src_filename} {patch.dst_sha1} {dst_hash}, {self.src_sha1}, {src_hash}')
+            # validate patch hash
+            if patch.pch_filename:
+                pch_hash = perform_hash(self.verbose, patch.pch_filename)
+                if patch.pch_sha1 != pch_hash:
+                    self.error(f'Hash mismatch for {patch.pch_filename}')
+                # apply the patch
+                self.apply_xdelta3(self.src_filename, patch.dst_filename, patch.pch_filename)
+            # copy file directly
+            else:
+                self.trace(f'Copying {self.src_filename}...')
+                atomic_replace(self.src_filename, patch.dst_filename)
 
         return self
 
