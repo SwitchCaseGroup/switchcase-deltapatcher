@@ -71,9 +71,9 @@ class PatchToolTests(PatchTool):
 
     def generate_permissions(self, path):
         if random.randint(0, 1) == 1:
-            os.chmod(path, stat.S_IWRITE | stat.S_IREAD)
+            os.chmod(path, stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
         else:
-            os.chmod(path, stat.S_IREAD)
+            os.chmod(path, stat.S_IRWXU | stat.S_IRWXG)
 
     def generate_id(self):
         id = self.sequence_number

@@ -201,7 +201,7 @@ class PatchTool:
 
         # apply file properties
         self.trace(f'Applying file properties...')
-        for (name, entry) in self.iterate_manifest('dst'):
+        for (name, entry) in self.manifest['dst'].items():
             dst_filename = os.path.join(self.dst, name)
             os.chmod(dst_filename, entry['mode'])
             os.chown(dst_filename, entry['uid'], entry['gid'])
@@ -336,7 +336,7 @@ class PatchTool:
                 src_attr = getattr(src_entry, attr)
                 dst_attr = getattr(dst_entry, attr)
                 if src_attr != dst_attr:
-                    self.error(f'{src_entry.name}: {attr}={src_attr}, {self.dst}: {attr}={dst_attr}')
+                    self.error(f'{src_entry.path}: {attr}={src_attr}, {dst_entry.path}: {attr}={dst_attr}')
             if src_entry.is_file and local_manifest['src'][src_entry.name]['sha1'] != local_manifest['dst'][src_entry.name]['sha1']:
                 self.error(f'{src_entry.name}: src/dst sha1 mismatch!')
 
