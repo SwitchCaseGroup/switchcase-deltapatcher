@@ -49,7 +49,7 @@ class PatchToolTests(PatchTool):
         self.generate_random(self.pch, self.target_size)
         self.generate_random(self.out, self.target_size)
         self.initialize('src', 'dst', 'pch')
-        self.permute_dir(self.src, self.dst, self.src_files)
+        self.permute_dir(self.src, self.dst, self.iterate_files('src'))
 
     def generate_random(self, path, size):
         while size:
@@ -69,12 +69,13 @@ class PatchToolTests(PatchTool):
         self.sequence_number += 1
         return str(id)
 
-    def permute_dir(self, src, dst, files):
+    def permute_dir(self, src, dst, src_files):
         # randomly copy/modify/remove
-        for filename in files:
+        for src_entry in src_files:
             choice = random.randint(0, 99)
-            src_filename = os.path.join(src, filename)
-            dst_filename = os.path.join(dst, filename)
+            src_filename = os.path.join(src, src_entry.name)
+            dst_filename = os.path.join(dst, src_entry.name)
+            print(src_filename, dst_filename)
             # randomly skip ("remove") files
             if choice < self.chance_remove[0] or choice >= self.chance_remove[1]:
                 # copy file to destination
@@ -85,7 +86,7 @@ class PatchToolTests(PatchTool):
                     self.permute_file(dst_filename)
                 # randomly split the file
                 if choice >= self.chance_split[0] and choice < self.chance_split[1]:
-                    self.split_file(filename)
+                    self.split_file(src_entry.name)
         # randomly add new files
         new_size = int(self.target_size * (self.chance_add[1] - self.chance_add[0]) / 100)
         self.changed_bytes += new_size
@@ -188,10 +189,9 @@ def test_apply(patch_tool_tests, inplace, resilience):
     if resilience:
         missing = []
         patch_tool_tests.initialize(src, dst, pch)
-        for filename in patch_tool_tests.src_files:
-            src_filename = os.path.join(patch_tool_tests.src, filename)
-            os.rename(src_filename, f'{src_filename}.missing')
-            missing.append(src_filename)
+        for src_entry in patch_tool_tests.iterate_files('src'):
+            os.rename(src_entry.path, f'{src_entry.path}.missing')
+            missing.append(src_entry.path)
         while len(missing):
             try:
                 patch_tool_tests.initialize(src, dst, pch)
@@ -236,7 +236,7 @@ def test_compare(patch_tool_tests):
     print(str(int(patch_tool_tests.changed_bytes / 1024)).ljust(8) + "modified/added")
 
 
-@pytest.mark.parametrize("dir, type", product(["dsv", "inv", "manifest"], ["add", "modify", "remove"]))
+@pytest.mark.parametrize("dir, type", product(["manifest", "dsv", "inv"], ["add", "modify", "remove"]))
 def test_validate_failure(patch_tool_tests, dir, type):
     patch_tool_tests.execute(['rm', '-rf', 'dsv'])
     patch_tool_tests.execute(['rm', '-rf', 'inv'])
@@ -244,17 +244,16 @@ def test_validate_failure(patch_tool_tests, dir, type):
     patch_tool_tests.execute(['cp', '-R', f'dst', 'inv'])
     patch_tool_tests.initialize('dsv', 'inv', 'pch')
     with pytest.raises(ValueError):
+        random_file = random.choice(list(patch_tool_tests.iterate_files('dst'))).name
         if dir == "manifest":
             with open(os.path.join('pch', 'manifest.json'), 'r') as inpfile:
                 local_manifest = json.load(inpfile)
             if type == "add":
-                local_manifest["dst"]["test/bogus"] = {
-                    "sha1": "bogus"
-                }
+                local_manifest["dst"]["test/bogus"] = {"sha1": "bad"}
             elif type == "modify":
-                local_manifest["dst"][patch_tool_tests.dst_files[0]]["sha1"] = "bogus"
+                local_manifest["dst"][random_file]["sha1"] = "bad"
             elif type == "remove":
-                del local_manifest["dst"][patch_tool_tests.dst_files[0]]
+                del local_manifest["dst"][random_file]
             with open(os.path.join('pch', 'manifest.json'), 'w') as outfile:
                 json.dump(local_manifest, outfile, indent=4)
         else:
@@ -262,9 +261,9 @@ def test_validate_failure(patch_tool_tests, dir, type):
                 with open(os.path.join(dir, 'added'), "wt") as outfile:
                     print("testing", file=outfile)
             elif type == "modify":
-                with open(os.path.join(dir, patch_tool_tests.dst_files[0]), "wt") as outfile:
+                with open(os.path.join(dir, random_file), "wt") as outfile:
                     print("modified", file=outfile)
             elif type == "remove":
-                os.remove(os.path.join(dir, patch_tool_tests.dst_files[0]))
+                os.remove(os.path.join(dir, random_file))
         patch_tool_tests.initialize('dsv', 'inv', 'pch')
         patch_tool_tests.validate()
