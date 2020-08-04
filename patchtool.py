@@ -194,6 +194,10 @@ class PatchTool:
         # refresh pch file information
         self.scan_files('pch', self.pch)
 
+        # update pch manifest entries with file sizes
+        for pch_entry in self.iterate_files('pch'):
+            self.manifest['pch'][pch_entry.name]['size'] = pch_entry.size
+
         # determine src/dst size
         for dir in ['src', 'dst', 'pch']:
             for entry in self.iterate_files(dir):
@@ -317,12 +321,12 @@ class PatchTool:
         self.validate_src(local_manifest)
 
     def validate_manifest(self, local_manifest):
-        # validate all manifest src files exist in dst and hashes match
-        for (src_filename, _) in self.iterate_manifest('dst'):
-            if src_filename not in self.dst_files:
-                self.error(f'{src_filename}: missing from {self.dst}')
-            if local_manifest['dst'][src_filename]['sha1'] != self.manifest['dst'][src_filename]['sha1']:
-                self.error(f'{src_filename}: manifest sha1 mismatch!')
+        # validate all manifest dst files exist in manifest dst and hashes match
+        for (dst_filename, _) in self.iterate_manifest('dst'):
+            if dst_filename not in self.dst_files:
+                self.error(f'{dst_filename}: missing from {self.dst}')
+            if local_manifest['dst'][dst_filename]['sha1'] != self.manifest['dst'][dst_filename]['sha1']:
+                self.error(f'{dst_filename}: manifest sha1 mismatch!')
 
         # validate all dst files exist in manifest dst
         for dst_entry in self.dst_files.values():
