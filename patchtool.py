@@ -121,8 +121,6 @@ class PatchTool:
             # cleanup empty manifest entries
             if xdelta3.src_filename and len(self.manifest['src'][src_filename]['xdelta3']) == 0:
                 del self.manifest['src'][src_filename]['xdelta3']
-                if src_filename not in self.manifest['dst']:
-                    del self.manifest['src'][src_filename]
 
         # generate metadata for manifest file
         self.generate_metadata()
