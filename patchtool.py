@@ -68,7 +68,10 @@ class PatchTool:
                 # ensure directories exist
                 makedirs(directory)
                 # find all files in each directory
-                setattr(self, f'{dir}_files', {entry.name: entry for entry in self.scantree(directory, directory)})
+                self.scan_files(dir, directory)
+
+    def scan_files(self, dir, directory):
+        setattr(self, f'{dir}_files', {entry.name: entry for entry in self.scantree(directory, directory)})
 
     def create_pool(self):
         # flush the old pool which could have lingering subprocesses
@@ -89,7 +92,7 @@ class PatchTool:
         # populate src/dst manifest with files/dirs metadata
         for dir in ['src', 'dst']:
             for entry in getattr(self, f'{dir}_files').values():
-                self.manifest[dir][entry.name] = {attr: getattr(entry, attr) for attr in ['uid', 'gid', 'mode']}
+                self.manifest[dir][entry.name] = {attr: getattr(entry, attr) for attr in ['uid', 'gid', 'mode', 'size', 'mtime']}
 
         # create patch directory structure
         for entry in self.iterate_dirs('dst'):
@@ -121,16 +124,8 @@ class PatchTool:
                 if src_filename not in self.manifest['dst']:
                     del self.manifest['src'][src_filename]
 
-        # write manifest metadata
-        self.manifest["metadata"] = {
-            "manifest": {
-                "created": str(datetime.now()),
-                "version": 1.0,
-                "src": self.src,
-                "dst": self.dst,
-                "pch": self.pch
-            }
-        }
+        # generate metadata for manifest file
+        self.generate_metadata()
 
         # write the manifest file
         self.trace(f'Writing manifest...')
@@ -182,6 +177,29 @@ class PatchTool:
             elif src_entry.name in self.dst_files:
                 yield (src_entry, [src_entry])
         return map
+
+    def generate_metadata(self):
+        # write manifest metadata
+        self.manifest["metadata"] = {
+            "manifest": {
+                "created": str(datetime.now()),
+                "version": 1.0,
+                "src": self.src,
+                "dst": self.dst,
+                "pch": self.pch
+            },
+            "src_size": 0,
+            "dst_size": 0,
+            "pch_size": 0
+        }
+
+        # refresh pch file information
+        self.scan_files('pch', self.pch)
+
+        # determine src/dst size
+        for dir in ['src', 'dst', 'pch']:
+            for entry in self.iterate_files(dir):
+                self.manifest["metadata"][f'{dir}_size'] += entry.size
 
     def apply(self):
         # read the manifest file
@@ -355,6 +373,8 @@ class ManifestEntry:
         self.mode = stat.S_IMODE(stat_ret.st_mode)
         self.uid = stat_ret.st_uid
         self.gid = stat_ret.st_gid
+        self.size = stat_ret.st_size
+        self.mtime = str(datetime.fromtimestamp(stat_ret.st_mtime))
 
 
 class XDelta3Patch:
