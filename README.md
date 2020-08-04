@@ -60,9 +60,8 @@ With arbitrary hardware looking to patch ExpressoGame with Unreal Engine 4.14.3 
 ## Style
 
 This uses [flake8](https://flake8.pycqa.org/en/latest/) for Style Enforcement.
+Any overrides can be found in the `.flake8` file in the root of the project.
 
 ## Testing
 
-This has a general regression test as test.py which has its own command line options.
-
-It also supports [pytest](https://docs.pytest.org/en/stable/contents.html)
+It uses [pytest](https://docs.pytest.org/en/stable/contents.html) and the tests live in the `tests` directory
