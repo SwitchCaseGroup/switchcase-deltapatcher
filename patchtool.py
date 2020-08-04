@@ -9,6 +9,7 @@ import argparse
 import hashlib
 import signal
 import shutil
+import stat
 import json
 import sys
 import os
@@ -84,13 +85,15 @@ class PatchTool:
         shutil.rmtree(self.pch, ignore_errors=True)
         makedirs(self.pch)
 
-        # populate manifest and create patch subdirectories
+        # populate src manifest with file/dir metadata
         for entry in self.src_files.values():
             self.manifest['src'][entry.name] = {
                 'uid': entry.uid,
                 'gid': entry.gid,
                 'mode': entry.mode
             }
+
+        # populate dst manifest with file/dir metadata, create patch directory structure
         for entry in self.dst_files.values():
             self.manifest['dst'][entry.name] = {
                 'uid': entry.uid,
@@ -357,10 +360,10 @@ class ManifestEntry:
         self.is_file = not self.is_dir
         self.parse_stat(entry.stat(follow_symlinks=False))
 
-    def parse_stat(self, stat):
-        self.mode = stat.st_mode
-        self.uid = stat.st_uid
-        self.gid = stat.st_gid
+    def parse_stat(self, stat_ret):
+        self.mode = stat.S_IMODE(stat_ret.st_mode)
+        self.uid = stat_ret.st_uid
+        self.gid = stat_ret.st_gid
 
 
 class XDelta3Patch:
@@ -466,7 +469,7 @@ class XDelta3:
                 os.fsync(outfile.fileno())
 
         # perform atomic replace of temporary file
-        os.replace(tmp, dst)
+        self.replace(tmp, dst)
 
     def atomic_replace_pipe(self, dst, pipe, sha1_verify=None):
         tmp = f'{dst}.tmp'
@@ -491,9 +494,16 @@ class XDelta3:
             self.error(f'Hash mismatch for {dst}!')
 
         # perform atomic replace of temporary file
-        os.replace(tmp, dst)
+        self.replace(tmp, dst)
 
         return digest
+
+    def replace(self, src, dst):
+        try:
+            os.replace(src, dst)
+        except PermissionError:
+            os.chmod(dst, stat.S_IWRITE)
+            os.replace(src, dst)
 
 
 def trace(verbose, text):

@@ -4,6 +4,7 @@ import argparse
 import random
 import shutil
 import json
+import stat
 import sys
 import re
 import os
@@ -57,12 +58,22 @@ class PatchToolTests(PatchTool):
                 min(self.min_file_size, size), min(self.max_file_size, size))
             path_elements = random.randint(1, 4)
             filename = path
-            for _ in range(path_elements):
+            os.makedirs(filename, exist_ok=True)
+            for _ in range(path_elements - 1):
                 filename = os.path.join(filename, self.generate_id())
-            os.makedirs(os.path.dirname(filename), exist_ok=True)
+                os.makedirs(filename, exist_ok=True)
+                self.generate_permissions(filename)
+            filename = os.path.join(filename, self.generate_id())
             with open(filename, 'wb') as outfile:
                 outfile.write(os.urandom(file_size))
+            self.generate_permissions(filename)
             size -= file_size
+
+    def generate_permissions(self, path):
+        if random.randint(0, 1) == 1:
+            os.chmod(path, stat.S_IWRITE | stat.S_IREAD)
+        else:
+            os.chmod(path, stat.S_IREAD)
 
     def generate_id(self):
         id = self.sequence_number
@@ -235,7 +246,7 @@ def test_compare(patch_tool_tests):
     print(str(int(patch_tool_tests.changed_bytes / 1024)).ljust(8) + "modified/added")
 
 
-@pytest.mark.parametrize("dir, type", product(["manifest", "dsv", "inv"], ["add", "modify", "remove"]))
+@pytest.mark.parametrize("dir, type", product(["manifest", "dsv", "inv"], ["add", "modify", "remove", "permissions"]))
 def test_validate_failure(patch_tool_tests, dir, type):
     patch_tool_tests.execute(['rm', '-rf', 'dsv'])
     patch_tool_tests.execute(['rm', '-rf', 'inv'])
@@ -253,6 +264,12 @@ def test_validate_failure(patch_tool_tests, dir, type):
                 local_manifest["dst"][random_file]["sha1"] = "bad"
             elif type == "remove":
                 del local_manifest["dst"][random_file]
+            elif type == "permissions":
+                current = local_manifest["dst"][random_file]["mode"]
+                if current & stat.S_IWRITE:
+                    local_manifest["dst"][random_file]["mode"] = stat.S_IREAD
+                else:
+                    local_manifest["dst"][random_file]["mode"] = stat.S_IWRITE | stat.S_IREAD
             with open(os.path.join('pch', 'manifest.json'), 'w') as outfile:
                 json.dump(local_manifest, outfile, indent=4)
         else:
@@ -264,5 +281,12 @@ def test_validate_failure(patch_tool_tests, dir, type):
                     print("modified", file=outfile)
             elif type == "remove":
                 os.remove(os.path.join(dir, random_file))
+            elif type == "permissions":
+                full_path = os.path.join(dir, random_file)
+                current = stat.S_IMODE(os.stat(full_path).st_mode)
+                if current & stat.S_IWRITE:
+                    os.chmod(full_path, stat.S_IREAD)
+                else:
+                    os.chmod(full_path, stat.S_IWRITE | stat.S_IREAD)
         patch_tool_tests.initialize('dsv', 'inv', 'pch')
         patch_tool_tests.validate()
