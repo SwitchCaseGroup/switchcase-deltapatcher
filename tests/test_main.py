@@ -75,7 +75,6 @@ class PatchToolTests(PatchTool):
             choice = random.randint(0, 99)
             src_filename = os.path.join(src, src_entry.name)
             dst_filename = os.path.join(dst, src_entry.name)
-            print(src_filename, dst_filename)
             # randomly skip ("remove") files
             if choice < self.chance_remove[0] or choice >= self.chance_remove[1]:
                 # copy file to destination
