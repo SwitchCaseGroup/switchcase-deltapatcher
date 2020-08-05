@@ -1,0 +1,21 @@
+# Python package
+# Create and test a Python package on multiple Python versions.
+# Add steps that analyze code, save the dist with the build record, publish to a PyPI-compatible index, and more:
+# https://docs.microsoft.com/azure/devops/pipelines/languages/python
+
+
+# https://aka.ms/yaml
+resources:
+  repositories:
+  - repository: templates
+    type: github
+    endpoint: switchcase-build
+    name: SwitchCaseGroup/switchcase-azure-pipelines-templates
+    ref: refs/tags/v2.2.0
+
+trigger:
+- master
+- prs
+
+jobs:
+- template: jobs/build_python.yml@templates

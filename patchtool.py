@@ -1,10 +1,21 @@
 #
 # file: patchtool.py
 # desc: Binary delta patching tool
-# 
+#
 
-import multiprocessing, subprocess, argparse, hashlib, shutil, json, sys, os, io
+import multiprocessing
+import subprocess
+import argparse
+import hashlib
+import signal
+import shutil
+import stat
+import json
+import sys
+import os
+import io
 
+from datetime import datetime
 from functools import partial
 from collections import defaultdict
 
@@ -18,71 +29,101 @@ Example to generate patch directory, apply it and then validate:
 Patching can also be done in-place, over top of the source directory:
   python3 patchtool.py generate -s src_dir -d dst_dir -p patch_dir
   python3 patchtool.py apply -s src_dir -d src_dir -p patch_dir
-  python3 patchtool.py validate -s dst_dir -d src_dir -p patch_dir
+  python3 patchtool.py validate -d src_dir -p patch_dir
 
 Patch apply uses atomic file operations. If the process is interrupted,
 the apply command can be run again to resume patching.
 
 '''
 
+
 class PatchTool:
-    def __init__(self, src, dst, pch,  split, verbose):
+    def __init__(self, split, verbose):
+        self.split = split
+        self.verbose = verbose
+        self.manifest = defaultdict(dict)
+        self.pool = None
+        self.create_pool()
+
+    def __del__(self):
+        self.pool.terminate()
+        self.pool.close()
+        self.pool.join()
+
+    def initialize(self, src, dst, pch):
         self.src = src
         self.dst = dst
         self.pch = pch
-        self.split = split
-        self.verbose = verbose
-        # initialize blank manifest
-        self.manifest = defaultdict(dict)
-        # prepare to process on each of the system's cpus
-        self.pool = multiprocessing.Pool(processes = multiprocessing.cpu_count())
-
-    def initialize(self):
+        self.src_files = {}
+        self.dst_files = {}
+        self.pch_files = {}
+        self.create_pool()
         # initialize directories
         self.trace(f'Preparing file information...')
-        for dir in [ 'src', 'dst', 'pch' ]:
-            # convert dirs to absolute paths
-            setattr(self, dir, os.path.abspath(getattr(self, dir)))
-            # ensure directories exist
-            makedirs(getattr(self, dir))
-            # find all files in each directory
-            setattr(self, f'{dir}_files', [ os.path.relpath(filename, getattr(self, dir)) for filename in self.find_files(getattr(self, dir)) ])
+        for dir in ['src', 'dst', 'pch']:
+            directory = getattr(self, dir)
+            if directory:
+                # convert dirs to absolute paths
+                setattr(self, dir, os.path.abspath(directory))
+                # ensure directories exist
+                makedirs(directory)
+                # find all files in each directory
+                self.scan_files(dir, directory)
+
+    def scan_files(self, dir, directory):
+        setattr(self, f'{dir}_files', {entry.name: entry for entry in self.scantree(directory, directory)})
+
+    def create_pool(self):
+        # flush the old pool which could have lingering subprocesses
+        if self.pool:
+            self.pool.close()
+            self.pool.join()
+        # create pool, disabling SIGINT so parent process can handle it
+        handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
+        self.pool = multiprocessing.Pool(processes=multiprocessing.cpu_count())
+        signal.signal(signal.SIGINT, handler)
 
     def generate(self):
         # cleanup the patch directory
         self.trace(f'Cleaning {self.pch}...')
-        for filename in self.pch_files:
-            os.remove(os.path.join(self.pch, filename))
-        for dir in os.listdir(self.pch):
-            shutil.rmtree(os.path.join(self.pch, dir), ignore_errors=True)
+        shutil.rmtree(self.pch, ignore_errors=True)
+        makedirs(self.pch)
+
+        # populate src/dst manifest with files/dirs metadata
+        for dir in ['src', 'dst']:
+            for entry in getattr(self, f'{dir}_files').values():
+                self.manifest[dir][entry.name] = {attr: getattr(entry, attr) for attr in ['uid', 'gid', 'mode', 'size', 'mtime']}
+
+        # create patch directory structure
+        for entry in self.iterate_dirs('dst'):
+            makedirs(os.path.join(self.pch, entry.name))
 
         # perform patch generation in parallel and process the results as they arrive
         for xdelta3 in self.pool.imap_unordered(XDelta3.generate_patches, self.generate_queue()):
             # update manifest with src hash, if the patch(es) had a source
             if xdelta3.src_filename:
                 src_filename = os.path.relpath(xdelta3.src_filename, self.src)
-                self.manifest['src'][src_filename] = { 'sha256': xdelta3.src_sha256, "xdelta3": {} }
+                self.manifest['src'][src_filename]['sha1'] = xdelta3.src_sha1
+                self.manifest['src'][src_filename]["xdelta3"] = {}
             # process each patch's results
             for patch in xdelta3.patches:
                 # update manifest with dst hash
                 dst_filename = os.path.relpath(patch.dst_filename, self.dst)
-                self.manifest['dst'][dst_filename] = { 'sha256': patch.dst_sha256 }
+                self.manifest['dst'][dst_filename]['sha1'] = patch.dst_sha1
                 # process patch file result if there was one
-                if patch.pch_sha256:
-                    # update manifest with patch manifest
+                if patch.pch_sha1:
+                    # update manifest with patch hash
                     pch_filename = os.path.relpath(patch.pch_filename, self.pch)
-                    self.manifest['pch'][pch_filename] = { 'sha256': patch.pch_sha256 }
-                    # if this patch is a delta, update manifest with the delta's hash
+                    self.manifest['pch'][pch_filename] = {'sha1': patch.pch_sha1}
+                    # if this patch is a delta, update src in manifest with the delta's filename
                     if xdelta3.src_filename:
                         self.manifest['src'][src_filename]['xdelta3'][dst_filename] = pch_filename
             # cleanup empty manifest entries
             if xdelta3.src_filename and len(self.manifest['src'][src_filename]['xdelta3']) == 0:
                 del self.manifest['src'][src_filename]['xdelta3']
-                if src_filename not in self.manifest['dst']:
-                    del self.manifest['src'][src_filename]
-        
-        # generate directory whitelist
-        self.manifest['dir'] = [ os.path.relpath(filename, self.dst) for filename in self.find_dirs(self.dst) ]
+
+        # generate metadata for manifest file
+        self.generate_metadata()
 
         # write the manifest file
         self.trace(f'Writing manifest...')
@@ -92,146 +133,177 @@ class PatchTool:
     def generate_queue(self):
         # search for modified files and queue patches for them
         self.trace(f'Creating deltas for modified files...')
-        for src_filename in self.src_files:
+        for (src, dsts) in self.generate_merged():
             # create deltas relative to this source file
-            xdelta3 = XDelta3(self.verbose, os.path.join(self.src, src_filename))
+            xdelta3 = XDelta3(self.verbose, src.path)
             # iterate through our destination files, looking for matches
-            for dst_filename in [dst_filename for dst_filename in self.dst_files if self.merged(src_filename, dst_filename)]:
-                # skip if we already have an earlier match
-                if dst_filename in self.manifest['dst']:
-                    self.trace(f'Skipping duplicate match {dst_filename}')
-                    continue
-                self.trace(f'Matched destination {dst_filename}')
-                # mark this dst as having been queued for processing already
-                self.manifest['dst'][dst_filename] = { }
+            for dst in dsts:
+                self.trace(f'Matched destination {dst.name}')
+                # mark this dst as having been queued for processing
+                self.manifest['dst'][dst.name]['sha1'] = ''
                 # generate xdelta3 if the files don't already match
-                pch_filename = f'{dst_filename}.xdelta3'
-                abs_dst_filename = os.path.join(self.dst, dst_filename)
-                abs_pch_filename = os.path.join(self.pch, pch_filename)
+                pch_name = f'{dst.name}.xdelta3'
+                abs_dst_filename = os.path.join(self.dst, dst.name)
+                abs_pch_filename = os.path.join(self.pch, pch_name)
                 xdelta3.add_patch(XDelta3Patch(abs_dst_filename, abs_pch_filename))
             yield xdelta3
 
-        # search for files without a source and queue patches for them
+        # search for destination files without a source and create full-copy patches for them
         self.trace(f'Copying added files...')
-        for dst_filename in [dst_filename for dst_filename in self.dst_files if dst_filename not in self.manifest['dst']]:
-            pch_filename = os.path.join(self.pch, dst_filename)
-            self.manifest['dst'][dst_filename] = { }
+        for dst in [dst for dst in self.iterate_files('dst') if 'sha1' not in self.manifest['dst'][dst.name]]:
+            pch_filename = os.path.join(self.pch, dst.name)
             xdelta3 = XDelta3(self.verbose, None)
-            xdelta3.add_patch(XDelta3Patch(os.path.join(self.dst, dst_filename), pch_filename))
+            xdelta3.add_patch(XDelta3Patch(dst.path, pch_filename))
             yield xdelta3
 
-    def get_extension(self, filename):
-        extension_offs = filename.rfind('.')
-        return filename[extension_offs+1:] if extension_offs != -1 else ''
+    def generate_merged(self):
+        map = defaultdict(list)
+        # prepare list of destination files for each "prefix" (filename prior to final '.' character)
+        for dst_entry in self.iterate_files('dst'):
+            extension = dst_entry.name.rfind('.')
+            if extension != -1:
+                map[dst_entry.name[:extension]].append(dst_entry)
+                continue
+            map[dst_entry.name].append(dst_entry)
+        # use the prefix lists from above to return source files mapped to their split destination file(s)
+        for src_entry in self.iterate_files('src'):
+            extension = src_entry.name.rfind('.')
+            if extension != -1 and src_entry.name[extension + 1:] in self.split:
+                dsts = map[src_entry.name[:extension]]
+                if len(dsts):
+                    yield (src_entry, dsts)
+            elif src_entry.name in self.dst_files:
+                yield (src_entry, [src_entry])
+        return map
 
-    def get_prefix(self, filename):
-        extension_offs = filename.rfind('.')
-        return filename[:extension_offs:] if extension_offs != -1 else ''
+    def generate_metadata(self):
+        # write manifest metadata
+        self.manifest["metadata"] = {
+            "manifest": {
+                "created": str(datetime.now()),
+                "version": 1.0,
+                "src": self.src,
+                "dst": self.dst,
+                "pch": self.pch
+            },
+            "src_size": 0,
+            "dst_size": 0,
+            "pch_size": 0
+        }
 
-    def merged(self, src_filename, dst_filename):
-        # files are themselves, of course
-        if src_filename == dst_filename:
-            return True
-        # handle our known split file extensions
-        if self.get_extension(src_filename) in self.split:
-            if os.path.dirname(src_filename) == os.path.dirname(dst_filename):
-                if self.get_prefix(src_filename) == self.get_prefix(dst_filename):
-                    return True
-        return False
-        
+        # refresh pch file information
+        self.scan_files('pch', self.pch)
+
+        # update pch manifest entries with file sizes
+        for pch_entry in self.iterate_files('pch'):
+            self.manifest['pch'][pch_entry.name]['size'] = pch_entry.size
+
+        # determine src/dst size
+        for dir in ['src', 'dst', 'pch']:
+            for entry in self.iterate_files(dir):
+                self.manifest["metadata"][f'{dir}_size'] += entry.size
+
     def apply(self):
         # read the manifest file
         self.trace(f'Reading manifest...')
         with open(os.path.join(self.pch, 'manifest.json'), 'r') as inpfile:
             self.manifest = json.load(inpfile)
 
-        # remove any files not in the manifest
-        for filename in self.dst_files:
-            if filename not in self.manifest['dst']:
-                self.trace(f'Removing {filename}...')
-                os.remove(os.path.join(self.dst, filename))
+        # create destination directories, in tree order, applying manifest permissions
+        for (name, entry) in sorted(self.iterate_manifest('dst', True), key=lambda tuple: tuple[0]):
+            mkdir(os.path.join(self.dst, name), mode=entry['mode'])
 
         # perform patching in parallel (dependent files)
-        for xdelta3 in self.pool.imap_unordered(XDelta3.apply_patches, self.apply_queue(False)):
+        for _ in self.pool.imap_unordered(XDelta3.apply_patches, self.apply_queue(False)):
             pass
 
         # perform patching in parallel (dependencies)
-        for xdelta3 in self.pool.imap_unordered(XDelta3.apply_patches, self.apply_queue(True)):
+        for _ in self.pool.imap_unordered(XDelta3.apply_patches, self.apply_queue(True)):
             pass
 
-        # remove any dirs not in the manifest
-        for dir in [ os.path.relpath(filename, self.dst) for filename in self.find_dirs(self.dst) ]:
-            if dir not in self.manifest['dir']:
-                self.trace(f'Removing {dir}...')
-                shutil.rmtree(os.path.join(self.dst, dir), ignore_errors=True)
+        # apply file properties
+        self.trace(f'Applying file properties...')
+        for (name, entry) in self.manifest['dst'].items():
+            dst_filename = os.path.join(self.dst, name)
+            os.chmod(dst_filename, entry['mode'])
+            os.chown(dst_filename, entry['uid'], entry['gid'])
 
-    def apply_queue(self, dependencies):
+        # remove any files not in the manifest
+        for entry in [entry for entry in self.iterate_files('dst') if entry.name not in self.manifest['dst']]:
+            self.trace(f'Removing {entry.name}...')
+            remove(os.path.join(self.dst, entry.name))
+
+        # remove any directories not in the manifest
+        for entry in [entry for entry in self.iterate_dirs('dst') if entry.name not in self.manifest['dst']]:
+            self.trace(f'Removing {entry.name}...')
+            shutil.rmtree(os.path.join(self.dst, entry.name), ignore_errors=True)
+
+    def apply_queue(self, sources):
         # search for files which need to be copied or patched from source dir
-        self.trace(f'Patching files...')
-        for src_filename in self.manifest['src']:
+        self.trace(f'Patching files ({"sources" if sources else "dependents"})...')
+        for (src_filename, src_entry) in self.iterate_manifest('src'):
             xdelta3 = XDelta3(self.verbose, os.path.join(self.src, src_filename))
-            xdelta3.src_sha256 = self.manifest['src'][src_filename]['sha256']
-            for dst_filename, pch_filename in self.manifest['src'][src_filename].get('xdelta3', {}).items():
+            xdelta3.src_sha1 = src_entry['sha1']
+            # queue up patches for destination files which are deltas from a source file
+            for dst_filename, pch_filename in src_entry.get('xdelta3', {}).items():
                 abs_dst_filename = os.path.join(self.dst, dst_filename)
-                if dependencies == (src_filename == dst_filename):
+                # defer patching when destination == source, for in-place patching it would break other deltas
+                if sources == (src_filename == dst_filename):
                     abs_pch_filename = os.path.join(self.pch, pch_filename)
                     patch = XDelta3Patch(abs_dst_filename, abs_pch_filename)
-                    patch.dst_sha256 = self.manifest['dst'][dst_filename]['sha256']
-                    patch.pch_sha256 = self.manifest['pch'][pch_filename]['sha256']
+                    patch.dst_sha1 = self.manifest['dst'][dst_filename]['sha1']
+                    patch.pch_sha1 = self.manifest['pch'][pch_filename]['sha1']
                     xdelta3.add_patch(patch)
-            if src_filename in self.manifest['dst'] and self.manifest['src'][src_filename]['sha256'] == self.manifest['dst'][src_filename]['sha256']:
-                if dependencies:
-                    abs_dst_filename = os.path.join(self.dst, src_filename)
-                    xdelta3.add_patch(XDelta3Patch(abs_dst_filename, None))
+            # queue up patches for destination files to be directly copied from source directory
+            if sources and src_filename in self.manifest['dst'] and src_entry['sha1'] == self.manifest['dst'][src_filename]['sha1']:
+                abs_dst_filename = os.path.join(self.dst, src_filename)
+                xdelta3.add_patch(XDelta3Patch(abs_dst_filename, None))
             yield xdelta3
 
-        # search for files which need to be copied from patch dir
-        for pch_filename in self.manifest['pch']:
-            if pch_filename in self.manifest['dst']:
-                abs_dst_filename = os.path.join(self.dst, pch_filename)
-                abs_pch_filename = os.path.join(self.pch, pch_filename)
-                xdelta3 = XDelta3(self.verbose, abs_pch_filename)
-                xdelta3.src_sha256 = self.manifest['pch'][pch_filename]['sha256']
-                xdelta3.add_patch(XDelta3Patch(abs_dst_filename, None))
-                yield xdelta3
+        # queue up patches for destination files to be directly copied from patch directory
+        for pch_filename in [pch_filename for (pch_filename, _) in self.iterate_manifest('pch') if pch_filename in self.manifest['dst']]:
+            abs_dst_filename = os.path.join(self.dst, pch_filename)
+            abs_pch_filename = os.path.join(self.pch, pch_filename)
+            xdelta3 = XDelta3(self.verbose, abs_pch_filename)
+            xdelta3.src_sha1 = self.manifest['pch'][pch_filename]['sha1']
+            xdelta3.add_patch(XDelta3Patch(abs_dst_filename, None))
+            yield xdelta3
 
-    def find_files(self, path):
-        if not os.path.isfile(path):
-            for current in os.listdir(path):
-                yield from self.find_files(os.path.join(path, current))
-        else:
-            yield path
+    def iterate_manifest(self, dir, dirs=False):
+        for (name, entry) in self.manifest[dir].items():
+            if ('sha1' not in entry) == dirs:
+                yield (name, entry)
 
-    def find_dirs(self, path):
-        if not os.path.isfile(path):
-            yield path
-            for current in os.listdir(path):
-                yield from self.find_dirs(os.path.join(path, current))
+    def iterate_files(self, dir):
+        for entry in getattr(self, f'{dir}_files').values():
+            if entry.is_file:
+                yield entry
+
+    def iterate_dirs(self, dir):
+        for entry in getattr(self, f'{dir}_files').values():
+            if entry.is_dir:
+                yield entry
+
+    def scantree(self, basedir, path):
+        try:
+            for entry in os.scandir(path):
+                yield ManifestEntry(basedir, entry)
+                if entry.is_dir(follow_symlinks=False):
+                    yield from self.scantree(basedir, entry.path)
+        except FileNotFoundError:
+            pass
 
     def generate_hashes(self, manifest, dirs):
-        # queue the hashes
-        queue = [ os.path.join(getattr(self, dir), filename) for dir in dirs for filename in getattr(self, f'{dir}_files') ]
+        # prepare the queue of files to hash
+        queue = [entry.path for dir in dirs for entry in self.iterate_files(dir)]
         # perform hashes in parallel
         tasks = list(self.pool.imap(partial(perform_hash, self.verbose), queue))
-        # retrieve results in same order as queued
+        # retrieve results in the same order as queued
         for dir in dirs:
-            for filename in getattr(self, f'{dir}_files'):
-                manifest[dir][filename] = {
-                    'sha256': tasks.pop(0)
+            for entry in self.iterate_files(dir):
+                manifest[dir][entry.name] = {
+                    'sha1': tasks.pop(0)
                 }
-
-    def generate_hash(self, path):
-        self.trace(f'Hashing {path}...')
-        hash = hashlib.sha256()
-        try:
-            with open(path, 'rb') as inpfile:
-                block = inpfile.read(io.DEFAULT_BUFFER_SIZE)
-                while len(block) != 0:
-                    hash.update(block)
-                    block = inpfile.read(io.DEFAULT_BUFFER_SIZE)
-        except:
-            pass
-        return hash.hexdigest()
 
     def validate(self):
         # read the manifest file
@@ -241,44 +313,225 @@ class PatchTool:
 
         # generate local hashes
         self.trace(f'Generating hashes...')
-        local_manifest = { "src": { }, "dst": { }, "pch": { } }
-        self.generate_hashes(local_manifest, ['src', 'dst'])
+        local_manifest = defaultdict(dict)
+        self.generate_hashes(local_manifest, ['src', 'dst', 'pch'])
+
+        # validate against manifest and local src files
+        self.validate_manifest(local_manifest)
+        self.validate_src(local_manifest)
+
+    def validate_manifest(self, local_manifest):
+        # validate all manifest dst/pch files exist locally and hashes match
+        for dir in ['dst', 'pch']:
+            for (filename, _) in self.iterate_manifest(dir):
+                if filename not in getattr(self, f'{dir}_files'):
+                    self.error(f'{filename}: missing from {getattr(self, dir)}')
+                if local_manifest[dir][filename]['sha1'] != self.manifest[dir][filename]['sha1']:
+                    self.error(f'{filename}: manifest sha1 mismatch!')
+
+        # validate all dst files exist in manifest dst
+        for dst_entry in self.dst_files.values():
+            if dst_entry.name not in self.manifest['dst']:
+                self.error(f'{dst_entry.name}: missing from manifest!')
+
+    def validate_src(self, local_manifest):
+        # skip if local src is not available (e.g. for in-place patching)
+        if not self.src:
+            return
 
         # validate all src files exist in dst and hashes match
-        for src_filename in self.src_files:
-            if src_filename not in self.dst_files:
-                self.error(f'{src_filename}: missing from {self.dst}')
-            elif local_manifest['src'][src_filename]['sha256'] != local_manifest['dst'][src_filename]['sha256']:
-                self.error(f'{src_filename}: src/dst sha256 mismatch!')
-            elif local_manifest['src'][src_filename]['sha256'] != self.manifest['dst'][src_filename]['sha256']:
-                self.error(f'{src_filename}: manifest sha256 mismatch!')
+        for src_entry in self.src_files.values():
+            if src_entry.name not in self.dst_files:
+                self.error(f'{src_entry.name}: missing from {self.dst}')
+            dst_entry = self.dst_files[src_entry.name]
+            for attr in ['is_dir', 'uid', 'gid', 'mode']:
+                src_attr = getattr(src_entry, attr)
+                dst_attr = getattr(dst_entry, attr)
+                if src_attr != dst_attr:
+                    self.error(f'{src_entry.path}: {attr}={src_attr}, {dst_entry.path}: {attr}={dst_attr}')
+            if src_entry.is_file and local_manifest['src'][src_entry.name]['sha1'] != local_manifest['dst'][src_entry.name]['sha1']:
+                self.error(f'{src_entry.name}: src/dst sha1 mismatch!')
 
         # validate all dst files exist in src
-        for dst_filename in self.dst_files:
-            if dst_filename not in self.src_files:
-                self.error(f'{dst_filename}: missing from {self.src}')
+        for dst_entry in self.dst_files.values():
+            if dst_entry.name not in self.src_files:
+                self.error(f'{dst_entry.name}: missing from {self.src}')
+
+    def analyze(self):
+        # populate src/dst manifest with files/dirs metadata
+        for dir in ['src', 'dst']:
+            for entry in getattr(self, f'{dir}_files').values():
+                self.manifest[dir][entry.name] = {attr: getattr(entry, attr) for attr in ['uid', 'gid', 'mode', 'size', 'mtime']}
+
+        # determine what savings there would be with case-insensitive src/dst keying
+        self.trace(f'Searching for case insensitive src/dst matches...')
+        case_insensitive_size = 0
+        upper = {src_entry.upper(): src_entry for src_entry in self.manifest['src']}
+        for dst_entry in self.manifest['dst']:
+            if dst_entry.upper() in upper and dst_entry not in self.manifest['src']:
+                file_size = self.manifest["dst"][dst_entry]["size"]
+                self.trace(f'{dst_entry} => {upper[dst_entry.upper()]}: {file_size:,} bytes')
+                case_insensitive_size += file_size
+
+        # determine what savings there would be with filename matching
+        self.trace(f'Searching for potentially moved files...')
+        src_filenames = {os.path.basename(entry.path): entry for entry in self.iterate_files('dst')}
+        dst_filenames = {os.path.basename(entry.path): entry for entry in self.iterate_files('src')}
+        moved_file_size = 0
+        for (src_filename, src_entry) in src_filenames.items():
+            if src_filename in dst_filenames:
+                dst_entry = dst_filenames[src_filename]
+                if src_entry.name != dst_entry.name:
+                    self.trace(f'{src_entry.name} => {dst_entry.name}: {dst_entry.size:,} bytes')
+                    moved_file_size += src_entry.size
+
+        print(f'Case insensitive savings could be at most {case_insensitive_size:,} bytes')
+        print(f'Moved file savings could be at most {moved_file_size:,} bytes')
 
     def trace(self, str):
-        if self.verbose:
-            print(str)
+        trace(self.verbose, str)
 
     def error(self, str):
-        print(str)
-        exit(1)
+        raise ValueError(str)
+
+
+class ManifestEntry:
+    def __init__(self, basedir, entry):
+        self.name = os.path.relpath(entry.path, basedir)
+        self.path = entry.path
+        self.is_dir = entry.is_dir(follow_symlinks=False)
+        self.is_file = not self.is_dir
+        self.parse_stat(entry.stat(follow_symlinks=False))
+
+    def parse_stat(self, stat_ret):
+        self.mode = stat.S_IMODE(stat_ret.st_mode)
+        self.uid = stat_ret.st_uid
+        self.gid = stat_ret.st_gid
+        self.size = stat_ret.st_size
+        self.mtime = str(datetime.fromtimestamp(stat_ret.st_mtime))
+
 
 class XDelta3Patch:
     def __init__(self, dst_filename, pch_filename):
         self.dst_filename = dst_filename
         self.pch_filename = pch_filename
-        self.dst_sha256 = None
-        self.pch_sha256 = None
+        self.dst_sha1 = None
+        self.pch_sha1 = None
+
 
 class XDelta3:
     def __init__(self, verbose, src_filename):
         self.verbose = verbose
         self.src_filename = src_filename
-        self.src_sha256 = None
+        self.src_sha1 = None
         self.patches = []
+
+    def add_patch(self, patch):
+        self.patches.append(patch)
+
+    def generate_patches(self):
+        # hash the source file, if there is one
+        if self.src_filename:
+            self.src_sha1 = perform_hash(self.verbose, self.src_filename)
+        # generate all of the specified patches
+        for patch in self.patches:
+            # hash the destination file
+            patch.dst_sha1 = perform_hash(self.verbose, patch.dst_filename)
+            # if there is no source, copy the destination file directly
+            if not self.src_filename:
+                self.atomic_replace(patch.dst_filename, patch.pch_filename)
+                patch.pch_sha1 = patch.dst_sha1
+            # otherwise, if the destination hash don't already match, create a patch
+            elif self.src_sha1 != patch.dst_sha1:
+                self.trace(f'Creating delta for {patch.dst_filename}...')
+                command = [
+                    "xdelta3", "-e", "-9", "-f", "-c",
+                    "-s", self.src_filename, patch.dst_filename
+                ]
+                self.trace(' '.join(command))
+                pipe = execute_pipe(command)
+                patch.pch_sha1 = self.atomic_replace_pipe(patch.pch_filename, pipe)
+        return self
+
+    def apply_patches(self):
+        # lazily hash source only once and only if/when necessary
+        src_hash = None
+        # process all of the patches
+        for patch in self.patches:
+            # check if dst already matches the manifest
+            dst_hash = perform_hash(self.verbose, patch.dst_filename)
+            if patch.dst_sha1 == dst_hash:
+                self.trace(f'Skipping already matching {patch.dst_filename}')
+                continue
+            # validate source hash matches the manifest
+            if not src_hash:
+                src_hash = perform_hash(self.verbose, self.src_filename)
+            if self.src_sha1 != src_hash:
+                self.error(f'Hash mismatch for {self.src_filename}')
+            # validate patch hash matches the manifest
+            if patch.pch_filename:
+                pch_hash = perform_hash(self.verbose, patch.pch_filename)
+                if patch.pch_sha1 != pch_hash:
+                    self.error(f'Hash mismatch for {patch.pch_filename}')
+                # patch the source file into the destination
+                self.apply_xdelta3(self.src_filename, patch)
+            # copy patch file directly to destination
+            else:
+                self.trace(f'Copying {self.src_filename}...')
+                self.atomic_replace(self.src_filename, patch.dst_filename)
+
+        return self
+
+    def apply_xdelta3(self, src_filename, patch):
+        command = [
+            "xdelta3", "-d", "-f", "-c",
+            "-s", src_filename, patch.pch_filename
+        ]
+        self.trace(' '.join(command))
+        pipe = execute_pipe(command)
+        self.atomic_replace_pipe(patch.dst_filename, pipe, patch.dst_sha1)
+
+    def atomic_replace(self, src, dst):
+        tmp = f'{dst}.tmp'
+        # copy input file to temporary file
+        with open(src, 'rb') as inpfile:
+            with open(tmp, 'wb') as outfile:
+                block = inpfile.read(io.DEFAULT_BUFFER_SIZE)
+                while len(block) != 0:
+                    outfile.write(block)
+                    block = inpfile.read(io.DEFAULT_BUFFER_SIZE)
+                outfile.flush()
+                os.fsync(outfile.fileno())
+        # perform atomic replace of temporary file
+        self.replace(tmp, dst)
+
+    def atomic_replace_pipe(self, dst, pipe, sha1_verify=None):
+        tmp = f'{dst}.tmp'
+        # copy pipe to temporary file while hashing its contents
+        hash = hashlib.sha1()
+        with open(tmp, 'wb') as outfile:
+            block = pipe.read(io.DEFAULT_BUFFER_SIZE)
+            while len(block) != 0:
+                hash.update(block)
+                outfile.write(block)
+                block = pipe.read(io.DEFAULT_BUFFER_SIZE)
+            outfile.flush()
+            os.fsync(outfile.fileno())
+            outfile.close()
+        # validate the digest
+        digest = hash.hexdigest()
+        if sha1_verify and sha1_verify != digest:
+            self.error(f'Hash mismatch for {dst}!')
+        # perform atomic replace of temporary file
+        self.replace(tmp, dst)
+        return digest
+
+    def replace(self, src, dst):
+        try:
+            os.replace(src, dst)
+        except PermissionError:
+            os.chmod(dst, stat.S_IWRITE)
+            os.replace(src, dst)
 
     def trace(self, text):
         if self.verbose:
@@ -287,137 +540,78 @@ class XDelta3:
     def error(self, str):
         raise ValueError(str)
 
-    def add_patch(self, patch):
-        self.patches.append(patch)
 
-    def generate_patches(self):
-        # hash the source file
-        if self.src_filename:
-            self.src_sha256 = perform_hash(self.verbose, self.src_filename)
-        # process all of the potential patches
-        for patch in self.patches:
-            # hash the destination file
-            patch.dst_sha256 = perform_hash(self.verbose, patch.dst_filename)
-            # only apply patches when there's a source who's hash doesn't match destination
-            if self.src_filename and self.src_sha256 != patch.dst_sha256:
-                # create the xdelta3 patch file
-                self.trace(f'Creating delta for {patch.dst_filename}...')
-                makedirs(os.path.dirname(patch.pch_filename))
-                command = [
-                    "xdelta3", "-e", "-9", "-f",
-                    "-s", self.src_filename, patch.dst_filename, patch.pch_filename
-                ]
-                self.trace(' '.join(command))
-                subprocess.check_output(command, universal_newlines=True)
-                # hash the patch file
-                patch.pch_sha256 = perform_hash(self.verbose, patch.pch_filename)
-            # if there is no source, copy the file itself as the patch
-            elif not self.src_filename:
-                atomic_replace(patch.dst_filename, patch.pch_filename)
-                patch.pch_sha256 = patch.dst_sha256
-        return self
-
-    def apply_xdelta3(self, src_filename, dst_filename, pch_filename):
-        tmp_filename = f'{dst_filename}.patched'
-        # apply xdelta3 patch to temporary file
-        makedirs(os.path.dirname(dst_filename))
-        command = [
-            "xdelta3", "-d", "-f",
-            "-s", src_filename, pch_filename, tmp_filename
-        ]
-        self.trace(' '.join(command))
-        subprocess.check_output(command, universal_newlines=True)
-        # perform atomic file copy/replace
-        atomic_replace(tmp_filename, dst_filename)
-        # remove temporary file
-        os.remove(tmp_filename)
-
-    def apply_patches(self):
-        # lazily hash source only once and only if/when necessary
-        src_hash = None
-        # process all of the patches
-        for patch in self.patches:
-            # check if dst already matches
-            dst_hash = perform_hash(self.verbose, patch.dst_filename)
-            if patch.dst_sha256 == dst_hash:
-                self.trace(f'Skipping already matching {patch.dst_filename}')
-                continue
-            # validate source hash
-            if not src_hash:
-                src_hash = perform_hash(self.verbose, self.src_filename)
-            if self.src_sha256 != src_hash:
-                self.error(f'Hash mismatch for {self.src_filename}')
-            # validate patch hash
-            if patch.pch_filename:
-                pch_hash = perform_hash(self.verbose, patch.pch_filename)
-                if patch.pch_sha256 != pch_hash:
-                    self.error(f'Hash mismatch for {self.pch_filename}')
-                # apply the patch
-                self.apply_xdelta3(self.src_filename, patch.dst_filename, patch.pch_filename)
-            # copy file directly
-            else:
-                self.trace(f'Copying {self.src_filename}...')
-                atomic_replace(self.src_filename, patch.dst_filename)
-        return self
-
-# log message if verbose is enabled
 def trace(verbose, text):
     if verbose:
         print(text)
 
-# error resilient makedirs
-def makedirs(dir):
+
+def remove(filename):
     try:
-        os.makedirs(dir, exist_ok=True)
-    except OSError as e:
-        print(dir, e)
+        os.remove(filename)
+    except FileNotFoundError:
+        pass
+
+
+def mkdir(dir, mode):
+    try:
+        os.mkdir(dir, mode=mode)
+    except FileExistsError:
+        pass
+
+
+def makedirs(dir):
+    os.makedirs(os.path.abspath(dir), exist_ok=True)
+
+
+def execute_pipe(command):
+    try:
+        p = subprocess.Popen(command, stdout=subprocess.PIPE)
+        return p.stdout
+    except subprocess.CalledProcessError as e:
+        print(f'{command}')
+        print(f'{e.stdout}')
         raise
 
-# generate hash of filename
+
 def perform_hash(verbose, filename):
     trace(verbose, f'Hashing {filename}...')
-    hash = hashlib.sha256()
+    hash = hashlib.sha1()
     try:
         with open(filename, 'rb') as inpfile:
             block = inpfile.read(io.DEFAULT_BUFFER_SIZE)
             while len(block) != 0:
                 hash.update(block)
                 block = inpfile.read(io.DEFAULT_BUFFER_SIZE)
+        return hash.hexdigest()
     except:
         pass
-    return hash.hexdigest()
+    return ""
 
-# perform atomic file replace
-def atomic_replace(src, dst):
-    tmp = f'{dst}.tmp'
-    # ensure directories exist (can safely fail if another worker collides)
-    try:
-        makedirs(os.path.dirname(dst))
-    except:
-        pass
-    # perform atomic file copy/replace
-    with open(src, 'rb') as inpfile:
-        with open(tmp, 'wb') as outfile:
-            block = inpfile.read(io.DEFAULT_BUFFER_SIZE)
-            while len(block) != 0:
-                outfile.write(block)
-                block = inpfile.read(io.DEFAULT_BUFFER_SIZE)
-            outfile.flush()
-            os.fsync(outfile.fileno())
-    os.replace(tmp, dst)
 
 if __name__ == "__main__":
     # currently supported CLI commands
-    commands = [ "generate", "apply", "validate" ]
+    commands = ["generate", "apply", "validate", "analyze"]
     # parse command-line arguments and execute the command
-    arg_parser = argparse.ArgumentParser(description=description, formatter_class=argparse.RawTextHelpFormatter)
-    arg_parser.add_argument('command', nargs='?', choices=commands, default="generate", help='command')
-    arg_parser.add_argument('-s', '--src', dest='src', required=True, help='source directory')
-    arg_parser.add_argument('-d', '--dst', dest='dst', required=True, help='destination directory')
-    arg_parser.add_argument('-p', '--patch', dest='pch', required=True, help='patch directory')
-    arg_parser.add_argument('-x', '--split', dest='split', default=[ 'uasset', 'umap' ], nargs="*", help='zero or more split file extensions')
-    arg_parser.add_argument('-v', '--verbose', dest='verbose', action="store_true", help='increase verbosity')
+    arg_parser = argparse.ArgumentParser(
+        description=description, formatter_class=argparse.RawTextHelpFormatter)
+    arg_parser.add_argument(
+        'command', nargs='?', choices=commands, default="generate", help='command')
+    arg_parser.add_argument('-s', '--src', dest='src',
+                            required=False, help='source directory')
+    arg_parser.add_argument('-d', '--dst', dest='dst',
+                            required=True, help='destination directory')
+    arg_parser.add_argument('-p', '--patch', dest='pch',
+                            required=True, help='patch directory')
+    arg_parser.add_argument('-x', '--split', dest='split', default=[
+                            'uasset', 'umap'], nargs="*", help='zero or more split file extensions')
+    arg_parser.add_argument('-v', '--verbose', dest='verbose',
+                            action="store_true", help='increase verbosity')
     args = arg_parser.parse_args()
-    patch_tool = PatchTool(args.src, args.dst, args.pch, args.split, args.verbose)
-    patch_tool.initialize()
-    getattr(globals()['PatchTool'], args.command)(patch_tool)
+
+    try:
+        patch_tool = PatchTool(args.split, args.verbose)
+        patch_tool.initialize(args.src, args.dst, args.pch)
+        getattr(globals()['PatchTool'], args.command)(patch_tool)
+    except KeyboardInterrupt:
+        pass
