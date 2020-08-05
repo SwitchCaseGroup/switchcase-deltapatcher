@@ -92,7 +92,9 @@ class PatchTool:
         # populate src/dst manifest with files/dirs metadata
         for dir in ['src', 'dst']:
             for entry in getattr(self, f'{dir}_files').values():
-                self.manifest[dir][entry.name] = {attr: getattr(entry, attr) for attr in ['uid', 'gid', 'mode', 'size', 'mtime']}
+                self.manifest[dir][entry.name] = {
+                    attr: getattr(entry, attr) for attr in ['uid', 'gid', 'mode', 'size', 'mtime']
+                }
 
         # create patch directory structure
         for entry in self.iterate_dirs('dst'):
@@ -255,19 +257,21 @@ class PatchTool:
                     patch.pch_sha1 = self.manifest['pch'][pch_filename]['sha1']
                     xdelta3.add_patch(patch)
             # queue up patches for destination files to be directly copied from source directory
-            if sources and src_filename in self.manifest['dst'] and src_entry['sha1'] == self.manifest['dst'][src_filename]['sha1']:
-                abs_dst_filename = os.path.join(self.dst, src_filename)
-                xdelta3.add_patch(XDelta3Patch(abs_dst_filename, None))
+            if sources and src_filename in self.manifest['dst']:
+                if src_entry['sha1'] == self.manifest['dst'][src_filename]['sha1']:
+                    abs_dst_filename = os.path.join(self.dst, src_filename)
+                    xdelta3.add_patch(XDelta3Patch(abs_dst_filename, None))
             yield xdelta3
 
         # queue up patches for destination files to be directly copied from patch directory
-        for pch_filename in [pch_filename for (pch_filename, _) in self.iterate_manifest('pch') if pch_filename in self.manifest['dst']]:
-            abs_dst_filename = os.path.join(self.dst, pch_filename)
-            abs_pch_filename = os.path.join(self.pch, pch_filename)
-            xdelta3 = XDelta3(self.verbose, abs_pch_filename)
-            xdelta3.src_sha1 = self.manifest['pch'][pch_filename]['sha1']
-            xdelta3.add_patch(XDelta3Patch(abs_dst_filename, None))
-            yield xdelta3
+        for (pch_filename, _) in self.iterate_manifest('pch'):
+            if pch_filename in self.manifest['dst']:
+                abs_dst_filename = os.path.join(self.dst, pch_filename)
+                abs_pch_filename = os.path.join(self.pch, pch_filename)
+                xdelta3 = XDelta3(self.verbose, abs_pch_filename)
+                xdelta3.src_sha1 = self.manifest['pch'][pch_filename]['sha1']
+                xdelta3.add_patch(XDelta3Patch(abs_dst_filename, None))
+                yield xdelta3
 
     def iterate_manifest(self, dir, dirs=False):
         for (name, entry) in self.manifest[dir].items():
@@ -349,8 +353,9 @@ class PatchTool:
                 dst_attr = getattr(dst_entry, attr)
                 if src_attr != dst_attr:
                     self.error(f'{src_entry.path}: {attr}={src_attr}, {dst_entry.path}: {attr}={dst_attr}')
-            if src_entry.is_file and local_manifest['src'][src_entry.name]['sha1'] != local_manifest['dst'][src_entry.name]['sha1']:
-                self.error(f'{src_entry.name}: src/dst sha1 mismatch!')
+            if src_entry.is_file:
+                if local_manifest['src'][src_entry.name]['sha1'] != local_manifest['dst'][src_entry.name]['sha1']:
+                    self.error(f'{src_entry.name}: src/dst sha1 mismatch!')
 
         # validate all dst files exist in src
         for dst_entry in self.dst_files.values():
@@ -361,7 +366,9 @@ class PatchTool:
         # populate src/dst manifest with files/dirs metadata
         for dir in ['src', 'dst']:
             for entry in getattr(self, f'{dir}_files').values():
-                self.manifest[dir][entry.name] = {attr: getattr(entry, attr) for attr in ['uid', 'gid', 'mode', 'size', 'mtime']}
+                self.manifest[dir][entry.name] = {
+                    attr: getattr(entry, attr) for attr in ['uid', 'gid', 'mode', 'size', 'mtime']
+                }
 
         # determine what savings there would be with case-insensitive src/dst keying
         self.trace(f'Searching for case insensitive src/dst matches...')
