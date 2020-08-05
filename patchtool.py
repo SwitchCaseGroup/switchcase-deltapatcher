@@ -138,6 +138,7 @@ class PatchTool:
         for (src, dsts) in self.generate_merged():
             # create deltas relative to this source file
             xdelta3 = XDelta3(self.verbose, src.path)
+            xdelta3.src_size = src.size
             # iterate through our destination files, looking for matches
             for dst in dsts:
                 self.trace(f'Matched destination {dst.name}')
@@ -246,6 +247,7 @@ class PatchTool:
         for (src_filename, src_entry) in self.iterate_manifest('src'):
             xdelta3 = XDelta3(self.verbose, os.path.join(self.src, src_filename))
             xdelta3.src_sha1 = src_entry['sha1']
+            xdelta3.src_size = src_entry['size']
             # queue up patches for destination files which are deltas from a source file
             for dst_filename, pch_filename in src_entry.get('xdelta3', {}).items():
                 abs_dst_filename = os.path.join(self.dst, dst_filename)
@@ -431,6 +433,7 @@ class XDelta3:
         self.verbose = verbose
         self.src_filename = src_filename
         self.src_sha1 = None
+        self.src_size = None
         self.patches = []
 
     def add_patch(self, patch):
@@ -452,7 +455,7 @@ class XDelta3:
             elif self.src_sha1 != patch.dst_sha1:
                 self.trace(f'Creating delta for {patch.dst_filename}...')
                 command = [
-                    "xdelta3", "-e", "-0", "-f", "-c",
+                    "xdelta3", "-e", "-0", "-B", str(max(self.src_size, 1 * 1024 * 1024)), "-f", "-c",
                     "-s", self.src_filename, patch.dst_filename
                 ]
                 self.trace(' '.join(command))
@@ -491,7 +494,7 @@ class XDelta3:
 
     def apply_xdelta3(self, src_filename, patch):
         command = [
-            "xdelta3", "-d", "-f", "-c",
+            "xdelta3", "-d", "-B", str(max(self.src_size, 1 * 1024 * 1024)), "-f", "-c",
             "-s", src_filename, patch.pch_filename
         ]
         self.trace(' '.join(command))
