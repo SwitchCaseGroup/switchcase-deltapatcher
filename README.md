@@ -53,9 +53,9 @@ With arbitrary hardware looking to patch ExpressoGame with Unreal Engine 4.14.3 
 
 | Task         | Elapsed Time |
 |--------------|--------------|
-| Generation   | 13m 52s      |
+| Generation   |  4m 43s      |
 | Copy of 4.25 |  7m 35s      |
-| Apply        | 11m 37s      |
+| Apply        |  4m 54s      |
 
 ## Style
 
