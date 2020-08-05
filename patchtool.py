@@ -452,7 +452,7 @@ class XDelta3:
             elif self.src_sha1 != patch.dst_sha1:
                 self.trace(f'Creating delta for {patch.dst_filename}...')
                 command = [
-                    "xdelta3", "-e", "-9", "-f", "-c",
+                    "xdelta3", "-e", "-0", "-f", "-c",
                     "-s", self.src_filename, patch.dst_filename
                 ]
                 self.trace(' '.join(command))
