@@ -159,14 +159,14 @@ class PatchTool:
                 self.manifest['dst'][dst.name]['sha1'] = ''
                 # generate xdelta3 if the files don't already match
                 abs_dst_filename = os.path.join(self.dst, dst.name)
-                abs_pch_filename = os.path.join(self.pch, f'{dst.name}.pch')
+                abs_pch_filename = os.path.join(self.pch, dst.name)
                 xdelta3.add_patch(XDelta3Patch(abs_dst_filename, abs_pch_filename, self.zip))
             yield xdelta3
 
         # search for destination files without a source and create full-copy patches for them
         self.trace(f'Copying added files...')
         for dst in [dst for dst in self.iterate_files('dst') if 'sha1' not in self.manifest['dst'][dst.name]]:
-            pch_filename = os.path.join(self.pch, f'{dst.name}.pch')
+            pch_filename = os.path.join(self.pch, dst.name)
             xdelta3 = XDelta3(self.verbose, None)
             xdelta3.add_patch(XDelta3Patch(dst.path, pch_filename, self.zip))
             yield xdelta3
@@ -434,18 +434,16 @@ class XDelta3:
         for patch in self.patches:
             # hash the destination file
             patch.dst_sha1 = perform_hash(self.verbose, patch.dst_filename)
-            # determine whether or not to apply zip
-            if patch.zip == "bz2" and patch.pch_filename.endswith(".bz2"):
-                patch.zip = None
-            elif patch.zip == "gzip" and patch.pch_filename.endswith(".gz"):
-                patch.zip = None
             # if there is no source, copy the destination file directly
             if not self.src_filename:
+                self.trace(f'Copying direct patch for {patch.dst_filename}...')
+                self.update_pch_filename(patch, delta=False)
                 with open(patch.dst_filename, "rb") as inpfile:
                     patch.pch_sha1 = self.atomic_replace_pipe(patch.pch_filename, inpfile.read(), zip=patch.zip)
             # otherwise, if the destination hash don't already match, create a patch
             elif self.src_sha1 != patch.dst_sha1:
                 self.trace(f'Creating delta for {patch.dst_filename}...')
+                self.update_pch_filename(patch, delta=True)
                 command = [
                     "xdelta3", "-e", "-0", "-B", str(max(self.src_size, 1 * 1024 * 1024)), "-f", "-c",
                     "-s", self.src_filename, patch.dst_filename
@@ -454,6 +452,16 @@ class XDelta3:
                 process = execute_pipe(command)
                 patch.pch_sha1 = self.atomic_replace_pipe(patch.pch_filename, process.stdout.read(), zip=patch.zip)
         return self
+
+    def update_pch_filename(self, patch, delta):
+        # determine whether or not to apply zip
+        if patch.zip == "bz2" and patch.pch_filename.endswith(".bz2"):
+            patch.zip = None
+        elif patch.zip == "gzip" and patch.pch_filename.endswith(".gz"):
+            patch.zip = None
+        patch.pch_filename = f'{patch.pch_filename}.xdelta3' if delta else patch.pch_filename
+        patch.pch_filename = f'{patch.pch_filename}.gz' if patch.zip == "gzip" else patch.pch_filename
+        patch.pch_filename = f'{patch.pch_filename}.bz2' if patch.zip == "bz2" else patch.pch_filename
 
     def apply_patches(self):
         # lazily hash source only once and only if/when necessary
