@@ -1,0 +1,44 @@
+#!/usr/bin/make -f
+
+# https://wiki.debian.org/Python/AppStyleGuide
+
+include /usr/share/dpkg/pkg-info.mk
+
+DH_ARGS=--with=python3 --buildsystem=pybuild
+# Run setup.py with the default python3 last so that the scripts use
+# #!/usr/bin/python3 and not #!/usr/bin/python3.X.
+PY3 := $(filter-out $(PY3DEFAULT),$(PY3REQUESTED)) python3
+
+PYTHON2_VERSIONS = $(shell pyversions -r)
+PYTHON3_VERSIONS = $(shell py3versions -r)
+py3sdo = set -e; $(foreach py, $(PYTHON3_VERSIONS), $(py) $(1);)
+pyalldo = set -e; $(foreach py, $(PYTHON2_VERSIONS) $(PYTHON3_VERSIONS), $(py) $(1);)
+
+%:
+	dh $@ $(DH_ARGS)
+
+override_dh_auto_build:
+	dh_auto_build
+	set -ex; for python in $(PY3); do \
+		LANG=C.UTF-8 LC_ALL=C.UTF-8 $$python setup.py build; \
+	done
+
+override_dh_auto_test:
+	PYTHONPATH=$(CURDIR) dh_auto_test
+
+override_dh_auto_install:
+	set -ex; for python in $(PY3); do \
+		LANG=C.UTF-8 LC_ALL=C.UTF-8 $$python setup.py install --root=$(CURDIR)/debian/$(DEB_SOURCE) --install-scripts=/usr/local/expresso/bin --install-layout=deb; \
+	done
+
+
+override_dh_usrlocal:
+
+override_dh_auto_clean:
+	dh_auto_clean
+	set -ex; for python in $(PY3); do \
+		LANG=C.UTF-8 LC_ALL=C.UTF-8 $$python setup.py clean -a; \
+	done
+	find -name __pycache__ | xargs rm -rf
+	rm -rf build
+	rm -rf *.egg-info
