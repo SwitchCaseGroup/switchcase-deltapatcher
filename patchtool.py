@@ -242,6 +242,7 @@ class PatchTool:
             dst_filename = os.path.join(self.dst, name)
             os.chmod(dst_filename, entry['mode'])
             os.chown(dst_filename, entry['uid'], entry['gid'])
+            os.utime(dst_filename, times=(entry['mtime'], entry['mtime']))
 
         # remove any files not in the manifest
         for entry in [entry for entry in self.iterate_files('dst') if entry.name not in self.manifest['dst']]:
@@ -340,12 +341,20 @@ class PatchTool:
 
         # validate manifest vs local files
         for dir in [dir for dir in ['src', 'dst', 'pch'] if getattr(self, dir)]:
-            for (filename, _) in self.iterate_manifest(dir):
+            # check each entry in the manifest against each local file
+            for (filename, entry) in self.iterate_manifest(dir):
+                dir_files = getattr(self, f'{dir}_files')
                 abs_filename = os.path.join(getattr(self, dir), filename)
-                if filename not in getattr(self, f'{dir}_files'):
+                # make sure file in manifest exists locally
+                if filename not in dir_files:
                     self.error(f'{abs_filename}: missing in {dir}')
+                # make sure hash in manifest matches the local hash
                 if local_manifest[dir][filename]['sha1'] != self.manifest[dir][filename]['sha1']:
                     self.error(f'{abs_filename}: manifest sha1 mismatch in {dir}')
+                # make sure each file attribute in the manifest matches the local file attribute
+                for attr in [attr for attr in ['uid', 'gid', 'mode', 'size', 'mtime'] if attr in entry]:
+                    if getattr(dir_files[filename], attr) != entry[attr]:
+                        print(f'{abs_filename}: {attr} mismatch in {dir}')
             for entry in (self.iterate_files(dir) if dir == 'pch' else self.iterate_all(dir)):
                 if entry.name != 'manifest.json' and entry.name not in self.manifest[dir]:
                     self.error(f'{entry.path}: missing from manifest!')
@@ -403,7 +412,7 @@ class ManifestEntry:
         self.uid = stat_ret.st_uid
         self.gid = stat_ret.st_gid
         self.size = stat_ret.st_size
-        self.mtime = str(datetime.fromtimestamp(stat_ret.st_mtime))
+        self.mtime = stat_ret.st_mtime
 
 
 class XDelta3Patch:
