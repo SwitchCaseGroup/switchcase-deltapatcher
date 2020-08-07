@@ -482,7 +482,7 @@ class XDelta3:
             else:
                 self.trace(f'Copying {self.src_filename}...')
                 with open(self.src_filename, "rb") as inpfile:
-                    self.atomic_replace_pipe(patch.dst_filename, inpfile.read(), dezip=patch.zip)
+                    self.atomic_replace_pipe(patch.dst_filename, inpfile.read(), unzip=patch.zip)
 
         return self
 
@@ -503,15 +503,15 @@ class XDelta3:
         inpfile.close()
         self.atomic_replace_pipe(patch.dst_filename, data, sha1=patch.dst_sha1)
 
-    def atomic_replace_pipe(self, dst, data, zip=False, dezip=False, sha1=None):
+    def atomic_replace_pipe(self, dst, data, zip=False, unzip=False, sha1=None):
         tmp = f'{dst}.tmp'
         # copy pipe to temporary file while hashing its contents
         hash = hashlib.sha1()
         with open(tmp, 'wb') as outfile:
             data = bz2.compress(data) if zip == "bz2" else data
             data = gzip.compress(data) if zip == "gzip" else data
-            data = bz2.decompress(data) if dezip == "bz2" else data
-            data = gzip.decompress(data) if dezip == "gzip" else data
+            data = bz2.decompress(data) if unzip == "bz2" else data
+            data = gzip.decompress(data) if unzip == "gzip" else data
             hash.update(data)
             outfile.write(data)
             outfile.flush()
