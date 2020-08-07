@@ -30,7 +30,7 @@ class PatchToolTests(PatchTool):
     chance_add = (60, 70)
 
     def __init__(self):
-        super().__init__(['uasset', 'umap'], verbose=False)
+        super().__init__(['uasset', 'umap'], True, verbose=False)
         # repeatability
         random.seed(0)
         # configure test directories

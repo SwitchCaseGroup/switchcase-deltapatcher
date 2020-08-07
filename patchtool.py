@@ -9,6 +9,7 @@ import argparse
 import hashlib
 import signal
 import shutil
+import gzip
 import stat
 import json
 import sys
@@ -38,11 +39,12 @@ the apply command can be run again to resume patching.
 
 
 class PatchTool:
-    def __init__(self, split, verbose):
+    def __init__(self, split, compress, verbose):
         self.split = split
         self.verbose = verbose
         self.manifest = defaultdict(dict)
         self.pool = None
+        self.compress = compress
         self.create_pool()
 
     def __del__(self):
@@ -116,7 +118,7 @@ class PatchTool:
                 if patch.pch_sha1:
                     # update manifest with patch hash
                     pch_filename = os.path.relpath(patch.pch_filename, self.pch)
-                    self.manifest['pch'][pch_filename] = {'sha1': patch.pch_sha1}
+                    self.manifest['pch'][pch_filename] = {'sha1': patch.pch_sha1, 'gzip': patch.pch_gzip}
                     # if this patch is a delta, update src in manifest with the delta's filename
                     if xdelta3.src_filename:
                         self.manifest['src'][src_filename]['xdelta3'][dst_filename] = pch_filename
@@ -145,10 +147,10 @@ class PatchTool:
                 # mark this dst as having been queued for processing
                 self.manifest['dst'][dst.name]['sha1'] = ''
                 # generate xdelta3 if the files don't already match
-                pch_name = f'{dst.name}.xdelta3'
+                pch_name = f'{dst.name}.pch'
                 abs_dst_filename = os.path.join(self.dst, dst.name)
                 abs_pch_filename = os.path.join(self.pch, pch_name)
-                xdelta3.add_patch(XDelta3Patch(abs_dst_filename, abs_pch_filename))
+                xdelta3.add_patch(XDelta3Patch(abs_dst_filename, abs_pch_filename, self.compress))
             yield xdelta3
 
         # search for destination files without a source and create full-copy patches for them
@@ -156,7 +158,7 @@ class PatchTool:
         for dst in [dst for dst in self.iterate_files('dst') if 'sha1' not in self.manifest['dst'][dst.name]]:
             pch_filename = os.path.join(self.pch, dst.name)
             xdelta3 = XDelta3(self.verbose, None)
-            xdelta3.add_patch(XDelta3Patch(dst.path, pch_filename))
+            xdelta3.add_patch(XDelta3Patch(dst.path, pch_filename, self.compress))
             yield xdelta3
 
     def generate_merged(self):
@@ -254,7 +256,7 @@ class PatchTool:
                 # defer patching when destination == source, for in-place patching it would break other deltas
                 if sources == (src_filename == dst_filename):
                     abs_pch_filename = os.path.join(self.pch, pch_filename)
-                    patch = XDelta3Patch(abs_dst_filename, abs_pch_filename)
+                    patch = XDelta3Patch(abs_dst_filename, abs_pch_filename, self.manifest['pch'][pch_filename]['gzip'])
                     patch.dst_sha1 = self.manifest['dst'][dst_filename]['sha1']
                     patch.pch_sha1 = self.manifest['pch'][pch_filename]['sha1']
                     xdelta3.add_patch(patch)
@@ -262,7 +264,7 @@ class PatchTool:
             if sources and src_filename in self.manifest['dst']:
                 if src_entry['sha1'] == self.manifest['dst'][src_filename]['sha1']:
                     abs_dst_filename = os.path.join(self.dst, src_filename)
-                    xdelta3.add_patch(XDelta3Patch(abs_dst_filename, None))
+                    xdelta3.add_patch(XDelta3Patch(abs_dst_filename, None, False))
             yield xdelta3
 
         # queue up patches for destination files to be directly copied from patch directory
@@ -272,7 +274,7 @@ class PatchTool:
                 abs_pch_filename = os.path.join(self.pch, pch_filename)
                 xdelta3 = XDelta3(self.verbose, abs_pch_filename)
                 xdelta3.src_sha1 = self.manifest['pch'][pch_filename]['sha1']
-                xdelta3.add_patch(XDelta3Patch(abs_dst_filename, None))
+                xdelta3.add_patch(XDelta3Patch(abs_dst_filename, None, self.manifest['pch'][pch_filename]['gzip']))
                 yield xdelta3
 
     def iterate_manifest(self, dir, dirs=False):
@@ -421,11 +423,12 @@ class ManifestEntry:
 
 
 class XDelta3Patch:
-    def __init__(self, dst_filename, pch_filename):
+    def __init__(self, dst_filename, pch_filename, pch_gzip):
         self.dst_filename = dst_filename
         self.pch_filename = pch_filename
         self.dst_sha1 = None
         self.pch_sha1 = None
+        self.pch_gzip = pch_gzip
 
 
 class XDelta3:
@@ -447,10 +450,12 @@ class XDelta3:
         for patch in self.patches:
             # hash the destination file
             patch.dst_sha1 = perform_hash(self.verbose, patch.dst_filename)
+            # determine whether or not to apply gzip compression
+            patch.pch_gzip = not patch.pch_filename.endswith(".gz")
             # if there is no source, copy the destination file directly
             if not self.src_filename:
-                self.atomic_replace(patch.dst_filename, patch.pch_filename)
-                patch.pch_sha1 = patch.dst_sha1
+                with open(patch.dst_filename, "rb") as inpfile:
+                    patch.pch_sha1 = self.atomic_replace_pipe(patch.pch_filename, inpfile.read(), compress=patch.pch_gzip)
             # otherwise, if the destination hash don't already match, create a patch
             elif self.src_sha1 != patch.dst_sha1:
                 self.trace(f'Creating delta for {patch.dst_filename}...')
@@ -459,8 +464,8 @@ class XDelta3:
                     "-s", self.src_filename, patch.dst_filename
                 ]
                 self.trace(' '.join(command))
-                pipe = execute_pipe(command)
-                patch.pch_sha1 = self.atomic_replace_pipe(patch.pch_filename, pipe)
+                process = execute_pipe(command)
+                patch.pch_sha1 = self.atomic_replace_pipe(patch.pch_filename, process.stdout.read(), compress=patch.pch_gzip)
         return self
 
     def apply_patches(self):
@@ -484,53 +489,42 @@ class XDelta3:
                 if patch.pch_sha1 != pch_hash:
                     self.error(f'Hash mismatch for {patch.pch_filename}')
                 # patch the source file into the destination
-                self.apply_xdelta3(self.src_filename, patch)
+                self.trace(f'Patching {patch.pch_filename}...')
+                self.apply_xdelta3(patch)
             # copy patch file directly to destination
             else:
                 self.trace(f'Copying {self.src_filename}...')
-                self.atomic_replace(self.src_filename, patch.dst_filename)
+                with open(self.src_filename, "rb") as inpfile:
+                    self.atomic_replace_pipe(patch.dst_filename, inpfile.read(), decompress=patch.pch_gzip)
 
         return self
 
-    def apply_xdelta3(self, src_filename, patch):
+    def apply_xdelta3(self, patch):
         command = [
             "xdelta3", "-d", "-B", str(max(self.src_size, 1 * 1024 * 1024)), "-f", "-c",
-            "-s", src_filename, patch.pch_filename
+            "-s", self.src_filename
         ]
         self.trace(' '.join(command))
-        pipe = execute_pipe(command)
-        self.atomic_replace_pipe(patch.dst_filename, pipe, patch.dst_sha1)
+        process = execute_pipe(command)
+        with gzip.open(patch.pch_filename, "rb") as inpfile:
+            data = process.communicate(inpfile.read())[0]
+        self.atomic_replace_pipe(patch.dst_filename, data, sha1=patch.dst_sha1)
 
-    def atomic_replace(self, src, dst):
-        tmp = f'{dst}.tmp'
-        # copy input file to temporary file
-        with open(src, 'rb') as inpfile:
-            with open(tmp, 'wb') as outfile:
-                block = inpfile.read(io.DEFAULT_BUFFER_SIZE)
-                while len(block) != 0:
-                    outfile.write(block)
-                    block = inpfile.read(io.DEFAULT_BUFFER_SIZE)
-                outfile.flush()
-                os.fsync(outfile.fileno())
-        # perform atomic replace of temporary file
-        self.replace(tmp, dst)
-
-    def atomic_replace_pipe(self, dst, pipe, sha1_verify=None):
+    def atomic_replace_pipe(self, dst, data, compress=False, decompress=False, sha1=None):
         tmp = f'{dst}.tmp'
         # copy pipe to temporary file while hashing its contents
         hash = hashlib.sha1()
         with open(tmp, 'wb') as outfile:
-            block = pipe.read(io.DEFAULT_BUFFER_SIZE)
-            while len(block) != 0:
-                hash.update(block)
-                outfile.write(block)
-                block = pipe.read(io.DEFAULT_BUFFER_SIZE)
+            data = gzip.compress(data) if compress else data
+            data = gzip.decompress(data) if decompress else data
+            hash.update(data)
+            outfile.write(data)
             outfile.flush()
             os.fsync(outfile.fileno())
             outfile.close()
         # validate the digest
         digest = hash.hexdigest()
-        if sha1_verify and sha1_verify != digest:
+        if sha1 and sha1 != digest:
             self.error(f'Hash mismatch for {dst}!')
         # perform atomic replace of temporary file
         self.replace(tmp, dst)
@@ -576,8 +570,7 @@ def makedirs(dir):
 
 def execute_pipe(command):
     try:
-        p = subprocess.Popen(command, stdout=subprocess.PIPE)
-        return p.stdout
+        return subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
     except subprocess.CalledProcessError as e:
         print(f'{command}')
         print(f'{e.stdout}')
@@ -615,12 +608,14 @@ if __name__ == "__main__":
                             required=True, help='patch directory')
     arg_parser.add_argument('-x', '--split', dest='split', default=[
                             'uasset', 'umap'], nargs="*", help='zero or more split file extensions')
+    arg_parser.add_argument('-nc', '--no_compress', dest='compress',
+                            action="store_false", help='compress patch files')
     arg_parser.add_argument('-v', '--verbose', dest='verbose',
                             action="store_true", help='increase verbosity')
     args = arg_parser.parse_args()
 
     try:
-        patch_tool = PatchTool(args.split, args.verbose)
+        patch_tool = PatchTool(args.split, args.compress, args.verbose)
         patch_tool.initialize(args.src, args.dst, args.pch)
         getattr(globals()['PatchTool'], args.command)(patch_tool)
     except KeyboardInterrupt:
