@@ -17,23 +17,28 @@ pyalldo = set -e; $(foreach py, $(PYTHON2_VERSIONS) $(PYTHON3_VERSIONS), $(py) $
 %:
 	dh $@ $(DH_ARGS)
 
-ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
-override_dh_auto_test:
-	$(call pyalldo, -m unittest discover -vv test/)
-endif
-
 override_dh_auto_build:
 	dh_auto_build
-	$(call py3sdo, setup.py build)
+	set -ex; for python in $(PY3); do \
+		LANG=C.UTF-8 LC_ALL=C.UTF-8 $$python setup.py build; \
+	done
+
+override_dh_auto_test:
+	PYTHONPATH=$(CURDIR) dh_auto_test
 
 override_dh_auto_install:
-	# whichever called last, will result in shebang update
-	# in this case, the scripts will end up with python3 shebang
-	# reverse the order if you want to continue using python2 shebang
-	dh_auto_install
-	$(call py3sdo, setup.py install --root=$(CURDIR)/debian/$(DEB_SOURCE) --install-layout=deb)
+	set -ex; for python in $(PY3); do \
+		LANG=C.UTF-8 LC_ALL=C.UTF-8 $$python setup.py install --root=$(CURDIR)/debian/$(DEB_SOURCE) --install-scripts=/usr/local/expresso/bin --install-layout=deb; \
+	done
+
+
+override_dh_usrlocal:
 
 override_dh_auto_clean:
 	dh_auto_clean
+	set -ex; for python in $(PY3); do \
+		LANG=C.UTF-8 LC_ALL=C.UTF-8 $$python setup.py clean -a; \
+	done
+	find -name __pycache__ | xargs rm -rf
 	rm -rf build
 	rm -rf *.egg-info

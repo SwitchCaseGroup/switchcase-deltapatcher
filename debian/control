@@ -1,15 +1,16 @@
-Source: deltapatcher
+Source: expresso-deltapatcher
 Section: python
-Priority: extra
+Priority: optional
 Maintainer: Interactive Fitness Developers <artifacts@ifholdings.com>
-Build-Depends: debhelper (>= 9), python3-all, dh-python
-XS-Testsuite: autopkgtest
-X-Python3-Version: >= 3.2
-Standards-Version: 3.9.5
+Build-Depends: debhelper (>= 11), python3-all, dh-python, python3-pytest
+#XS-Testsuite: autopkgtest
+X-Python3-Version: >= 3.6
+Standards-Version: 4.3.0
 
-Package: deltapatcher
-Architecture: any
+Package: expresso-deltapatcher
+Architecture: all
+Multi-Arch: foreign
 Pre-Depends: dpkg (>= 1.16.1), python3-all, ${misc:Pre-Depends}
 Depends: ${python3:Depends}, ${misc:Depends}, xdelta3
 Description: Expresso Delta Patcher
- Expresso Delta Patcher
+ Expresso Delta Patcher for partial file updates

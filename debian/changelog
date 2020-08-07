@@ -1,4 +1,4 @@
-deltapatcher (0.1.0) unstable; urgency=low
+expresso-deltapatcher (0.1.0) ubuntu1804; urgency=low
 
   * 0f88af4 Using python 3.6 to match bionic
 

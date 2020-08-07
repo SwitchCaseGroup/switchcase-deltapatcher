@@ -127,3 +127,12 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# debian
+.pybuild/
+debian/.debhelper/
+debian/expresso-deltapatcher.log
+debian/expresso-deltapatcher.substvars
+debian/expresso-deltapatcher/
+debian/files
+
