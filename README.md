@@ -17,23 +17,32 @@ apt-get install python3-full xdelta3
 ## Usage
 
 ```bash
-usage: patchtool.py [-h] -s SRC -d DST -p PCH [-x [SPLIT [SPLIT ...]]] [-v] [{generate,apply,validate}]
+usage: patchtool.py [-h] [-s SRC] [-d DST] -p PCH [-x [SPLIT [SPLIT ...]]]
+                    [-c {bz2,gzip,none}] [-v]
+                    [{generate,apply,validate,analyze}]
 
 Example to generate patch directory, apply it and then validate:
-  patchtool.py generate -s src_dir -d dst_dir -p patch_dir
-  patchtool.py apply -s src_dir -d out_dir -p patch_dir
-  patchtool.py validate -s dst_dir -d out_dir -p patch_dir
+  python3 patchtool.py generate -s src_dir -d dst_dir -p patch_dir
+  python3 patchtool.py apply -s src_dir -d out_dir -p patch_dir
+  python3 patchtool.py validate -s src_dir -d out_dir -p patch_dir
 
 Patching can also be done in-place, over top of the source directory:
-  patchtool.py generate -s src_dir -d dst_dir -p patch_dir
-  patchtool.py apply -s src_dir -d src_dir -p patch_dir
-  patchtool.py validate -d src_dir -p patch_dir
+  python3 patchtool.py generate -s src_dir -d dst_dir -p patch_dir
+  python3 patchtool.py apply -s src_dir -d src_dir -p patch_dir
+  python3 patchtool.py validate -d src_dir -p patch_dir
 
 Patch apply uses atomic file operations. If the process is interrupted,
 the apply command can be run again to resume patching.
 
+Validation can be done on either one or both of src/dst directories:
+  python3 patchtool.py validate -s src_dir -d dst_dir -p patch_dir
+  python3 patchtool.py validate -s src_dir -p patch_dir
+  python3 patchtool.py validate -d dst_dir -p patch_dir
+
+This allows a patch to be validated before and/or after in-place patching.
+
 positional arguments:
-  {generate,apply,validate}
+  {generate,apply,validate,analyze}
                         command
 
 optional arguments:
@@ -43,6 +52,8 @@ optional arguments:
   -p PCH, --patch PCH   patch directory
   -x [SPLIT [SPLIT ...]], --split [SPLIT [SPLIT ...]]
                         zero or more split file extensions
+  -c {bz2,gzip,none}, --zip {bz2,gzip,none}
+                        patch file zip
   -v, --verbose         increase verbosity
 ```
 

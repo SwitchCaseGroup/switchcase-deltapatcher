@@ -36,6 +36,13 @@ Patching can also be done in-place, over top of the source directory:
 Patch apply uses atomic file operations. If the process is interrupted,
 the apply command can be run again to resume patching.
 
+Validation can be done on either one or both of src/dst directories:
+  python3 patchtool.py validate -s dst_dir -d out_dir -p patch_dir
+  python3 patchtool.py validate -s src_dir -p patch_dir
+  python3 patchtool.py validate -d dst_dir -p patch_dir
+
+This allows a patch to be validated before and/or after in-place patching.
+
 '''
 
 
@@ -295,6 +302,10 @@ class PatchTool:
             if entry.is_dir:
                 yield entry
 
+    def iterate_all(self, dir):
+        for entry in getattr(self, f'{dir}_files').values():
+            yield entry
+
     def scantree(self, basedir, path):
         try:
             for entry in os.scandir(path):
@@ -327,47 +338,17 @@ class PatchTool:
         local_manifest = defaultdict(dict)
         self.generate_hashes(local_manifest, ['src', 'dst', 'pch'])
 
-        # validate against manifest and local src files
-        self.validate_manifest(local_manifest)
-        self.validate_src(local_manifest)
-
-    def validate_manifest(self, local_manifest):
-        # validate all manifest dst/pch files exist locally and hashes match
-        for dir in ['dst', 'pch']:
+        # validate manifest vs local files
+        for dir in [dir for dir in ['src', 'dst', 'pch'] if getattr(self, dir)]:
             for (filename, _) in self.iterate_manifest(dir):
+                abs_filename = os.path.join(getattr(self, dir), filename)
                 if filename not in getattr(self, f'{dir}_files'):
-                    self.error(f'{filename}: missing from {getattr(self, dir)}')
+                    self.error(f'{abs_filename}: missing in {dir}')
                 if local_manifest[dir][filename]['sha1'] != self.manifest[dir][filename]['sha1']:
-                    self.error(f'{filename}: manifest sha1 mismatch!')
-
-        # validate all dst files exist in manifest dst
-        for dst_entry in self.dst_files.values():
-            if dst_entry.name not in self.manifest['dst']:
-                self.error(f'{dst_entry.name}: missing from manifest!')
-
-    def validate_src(self, local_manifest):
-        # skip if local src is not available (e.g. for in-place patching)
-        if not self.src:
-            return
-
-        # validate all src files exist in dst and hashes match
-        for src_entry in self.src_files.values():
-            if src_entry.name not in self.dst_files:
-                self.error(f'{src_entry.name}: missing from {self.dst}')
-            dst_entry = self.dst_files[src_entry.name]
-            for attr in ['is_dir', 'uid', 'gid', 'mode']:
-                src_attr = getattr(src_entry, attr)
-                dst_attr = getattr(dst_entry, attr)
-                if src_attr != dst_attr:
-                    self.error(f'{src_entry.path}: {attr}={src_attr}, {dst_entry.path}: {attr}={dst_attr}')
-            if src_entry.is_file:
-                if local_manifest['src'][src_entry.name]['sha1'] != local_manifest['dst'][src_entry.name]['sha1']:
-                    self.error(f'{src_entry.name}: src/dst sha1 mismatch!')
-
-        # validate all dst files exist in src
-        for dst_entry in self.dst_files.values():
-            if dst_entry.name not in self.src_files:
-                self.error(f'{dst_entry.name}: missing from {self.src}')
+                    self.error(f'{abs_filename}: manifest sha1 mismatch in {dir}')
+            for entry in (self.iterate_files(dir) if dir == 'pch' else self.iterate_all(dir)):
+                if entry.name != 'manifest.json' and entry.name not in self.manifest[dir]:
+                    self.error(f'{entry.path}: missing from manifest!')
 
     def analyze(self):
         # populate src/dst manifest with files/dirs metadata
@@ -617,7 +598,7 @@ if __name__ == "__main__":
     arg_parser.add_argument('-s', '--src', dest='src',
                             required=False, help='source directory')
     arg_parser.add_argument('-d', '--dst', dest='dst',
-                            required=True, help='destination directory')
+                            required=False, help='destination directory')
     arg_parser.add_argument('-p', '--patch', dest='pch',
                             required=True, help='patch directory')
     arg_parser.add_argument('-x', '--split', dest='split', default=[

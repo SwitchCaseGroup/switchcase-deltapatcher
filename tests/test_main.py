@@ -219,14 +219,20 @@ def test_apply(patch_tool_tests, inplace, resilience):
 @pytest.mark.parametrize("inplace, resilience", [(False, False), (False, True), (True, False), (True, True)])
 def test_validate(patch_tool_tests, inplace, resilience):
     out = patch_tool_tests.get_out_dir(inplace, resilience)
-    patch_tool_tests.initialize('dst', out, 'pch')
+    patch_tool_tests.initialize('src', out, 'pch')
     patch_tool_tests.validate()
 
 
 @pytest.mark.parametrize("inplace, resilience", [(False, False), (False, True), (True, False), (True, True)])
-def test_validate_manifest(patch_tool_tests, inplace, resilience):
+def test_validate_dst_only(patch_tool_tests, inplace, resilience):
     out = patch_tool_tests.get_out_dir(inplace, resilience)
     patch_tool_tests.initialize(None, out, 'pch')
+    patch_tool_tests.validate()
+
+
+@pytest.mark.parametrize("inplace, resilience", [(False, False), (False, True), (True, False), (True, True)])
+def test_validate_src_only(patch_tool_tests, inplace, resilience):
+    patch_tool_tests.initialize('src', None, 'pch')
     patch_tool_tests.validate()
 
 
