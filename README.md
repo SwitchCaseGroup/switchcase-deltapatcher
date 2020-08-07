@@ -68,6 +68,16 @@ With arbitrary hardware looking to patch ExpressoGame with Unreal Engine 4.14.3 
 | Copy of 4.25 |  7m 35s      |
 | Apply        |  4m 15s      |
 
+## Patch size
+
+Generating a patch between ExpressoGame versions, we saw the following results for patch size.
+
+|  Directory   |  Size (GB)   |
+|--------------|--------------|
+|  4.14.3      |  36.10 GB    |
+|  4.25.1      |  35.90 GB    |
+|  Patch       |   0.99 GB    |
+
 ## Style
 
 This uses [flake8](https://flake8.pycqa.org/en/latest/) for Style Enforcement.
