@@ -286,3 +286,6 @@ def test_validate_failure(patch_tool_tests, dir, type):
                     os.chmod(full_path, stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
         patch_tool_tests.initialize('dsv', 'inv', 'pch')
         patch_tool_tests.validate()
+
+    # exception could leave zombie workers, re-init to flush the pool
+    patch_tool_tests.initialize('dsv', 'inv', 'pch')
