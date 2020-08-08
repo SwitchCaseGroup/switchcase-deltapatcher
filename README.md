@@ -41,6 +41,11 @@ Validation can be done on either one or both of src/dst directories:
 
 This allows a patch to be validated before and/or after in-place patching.
 
+Patch apply will continue after errors by default, progressing as far into the patch process as 
+possible. The process will return a nonzero exit code to denote that an error has occurred. Future
+calls to apply will recognize which files have already been patched and they will be skipped. To
+stop patching immediately on the first error, you can specify the --stop-on-error argument.
+
 positional arguments:
   {generate,apply,validate,analyze}
                         command

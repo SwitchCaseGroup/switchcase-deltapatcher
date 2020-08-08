@@ -47,12 +47,13 @@ This allows a patch to be validated before and/or after in-place patching.
 
 
 class PatchTool:
-    def __init__(self, split, zip, verbose):
+    def __init__(self, split, zip, stop_on_error, verbose):
         self.split = split
         self.verbose = verbose
         self.manifest = defaultdict(dict)
         self.pool = None
         self.zip = zip
+        self.stop_on_error = stop_on_error
         self.create_pool()
 
     def __del__(self):
@@ -232,10 +233,14 @@ class PatchTool:
         # perform patching in parallel (dependent files)
         for xdelta3 in self.pool.imap_unordered(XDelta3.apply_patches, self.apply_queue(False)):
             self.has_error = self.has_error or xdelta3.has_error
+            if self.has_error and self.stop_on_error:
+                raise ValueError("Stopping on error.")
 
         # perform patching in parallel (dependencies)
         for xdelta3 in self.pool.imap_unordered(XDelta3.apply_patches, self.apply_queue(True)):
             self.has_error = self.has_error or xdelta3.has_error
+            if self.has_error and self.stop_on_error:
+                raise ValueError("Stopping on error.")
 
         # apply file properties
         self.trace(f'Applying file properties...')
@@ -627,12 +632,14 @@ if __name__ == "__main__":
                             'uasset', 'umap'], nargs="*", help='zero or more split file extensions')
     arg_parser.add_argument('-c', '--zip', dest='zip',
                             choices=["bz2", "gzip", "none"], default="bz2", help='patch file zip')
+    arg_parser.add_argument('-e', '--stop-on-error', dest='stop_on_error',
+                            action="store_true", help='stop patching files immediately after the first error')
     arg_parser.add_argument('-v', '--verbose', dest='verbose',
                             action="store_true", help='increase verbosity')
     args = arg_parser.parse_args()
 
     try:
-        patch_tool = PatchTool(args.split, args.zip, args.verbose)
+        patch_tool = PatchTool(args.split, args.zip, args.stop_on_error, args.verbose)
         patch_tool.initialize(args.src, args.dst, args.pch)
         getattr(globals()['PatchTool'], args.command)(patch_tool)
         sys.exit(1 if patch_tool.has_error else 0)
