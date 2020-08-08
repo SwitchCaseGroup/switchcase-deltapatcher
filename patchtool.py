@@ -67,6 +67,7 @@ class PatchTool:
         self.src_files = {}
         self.dst_files = {}
         self.pch_files = {}
+        self.has_error = False
         self.create_pool()
         # initialize directories
         self.trace(f'Preparing file information...')
@@ -229,12 +230,12 @@ class PatchTool:
             mkdir(os.path.join(self.dst, name), mode=entry['mode'])
 
         # perform patching in parallel (dependent files)
-        for _ in self.pool.imap_unordered(XDelta3.apply_patches, self.apply_queue(False)):
-            pass
+        for xdelta3 in self.pool.imap_unordered(XDelta3.apply_patches, self.apply_queue(False)):
+            self.has_error = self.has_error or xdelta3.has_error
 
         # perform patching in parallel (dependencies)
-        for _ in self.pool.imap_unordered(XDelta3.apply_patches, self.apply_queue(True)):
-            pass
+        for xdelta3 in self.pool.imap_unordered(XDelta3.apply_patches, self.apply_queue(True)):
+            self.has_error = self.has_error or xdelta3.has_error
 
         # apply file properties
         self.trace(f'Applying file properties...')
@@ -431,6 +432,7 @@ class XDelta3:
         self.src_sha1 = None
         self.src_size = None
         self.patches = []
+        self.has_error = False
 
     def add_patch(self, patch):
         self.patches.append(patch)
@@ -477,30 +479,33 @@ class XDelta3:
         src_hash = None
         # process all of the patches
         for patch in self.patches:
-            # check if dst already matches the manifest
-            dst_hash = perform_hash(self.verbose, patch.dst_filename)
-            if patch.dst_sha1 == dst_hash:
-                self.trace(f'Skipping already matching {patch.dst_filename}')
-                continue
-            # validate source hash matches the manifest
-            if not src_hash:
-                src_hash = perform_hash(self.verbose, self.src_filename)
-            if self.src_sha1 != src_hash:
-                self.error(f'Hash mismatch for {self.src_filename}')
-            # validate patch hash matches the manifest
-            if patch.pch_filename:
-                pch_hash = perform_hash(self.verbose, patch.pch_filename)
-                if patch.pch_sha1 != pch_hash:
-                    self.error(f'Hash mismatch for {patch.pch_filename}')
-                # patch the source file into the destination
-                self.trace(f'Patching {patch.pch_filename}...')
-                self.apply_xdelta3(patch)
-            # copy patch file directly to destination
-            else:
-                self.trace(f'Copying {self.src_filename}...')
-                with open(self.src_filename, "rb") as inpfile:
-                    self.atomic_replace_pipe(patch.dst_filename, inpfile.read(), unzip=patch.zip)
-
+            try:
+                # check if dst already matches the manifest
+                dst_hash = perform_hash(self.verbose, patch.dst_filename)
+                if patch.dst_sha1 == dst_hash:
+                    self.trace(f'Skipping already matching {patch.dst_filename}')
+                    continue
+                # validate source hash matches the manifest
+                if not src_hash:
+                    src_hash = perform_hash(self.verbose, self.src_filename)
+                if self.src_sha1 != src_hash:
+                    self.error(f'Hash mismatch for {self.src_filename}')
+                # validate patch hash matches the manifest
+                if patch.pch_filename:
+                    pch_hash = perform_hash(self.verbose, patch.pch_filename)
+                    if patch.pch_sha1 != pch_hash:
+                        self.error(f'Hash mismatch for {patch.pch_filename}')
+                    # patch the source file into the destination
+                    self.trace(f'Patching {patch.pch_filename}...')
+                    self.apply_xdelta3(patch)
+                # copy patch file directly to destination
+                else:
+                    self.trace(f'Copying {self.src_filename}...')
+                    with open(self.src_filename, "rb") as inpfile:
+                        self.atomic_replace_pipe(patch.dst_filename, inpfile.read(), unzip=patch.zip)
+            except:
+                print(f'WARNING: Failed to apply patch: {sys.exc_info()[1]}')
+                self.has_error = True
         return self
 
     def apply_xdelta3(self, patch):
@@ -630,5 +635,6 @@ if __name__ == "__main__":
         patch_tool = PatchTool(args.split, args.zip, args.verbose)
         patch_tool.initialize(args.src, args.dst, args.pch)
         getattr(globals()['PatchTool'], args.command)(patch_tool)
+        sys.exit(1 if patch_tool.has_error else 0)
     except KeyboardInterrupt:
-        pass
+        sys.exit(1)
