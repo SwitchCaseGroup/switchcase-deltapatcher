@@ -156,6 +156,12 @@ class PatchToolTests(PatchTool):
 
     def get_out_dir(self, inplace, resilience):
         return f'out{"_inplace" if inplace else ""}{"_resilience" if resilience else ""}'
+        
+    def copytree(self, src, dst):
+        try:
+            shutil.copytree(src, dst)
+        except:
+            pass
 
     def execute(self, command, verbose=False, silent=False):
         self.trace(command)
@@ -192,7 +198,7 @@ def test_generate(patch_tool_tests):
 def test_apply(patch_tool_tests, inplace, resilience):
     out = patch_tool_tests.get_out_dir(inplace, resilience)
     if inplace or resilience:
-        shutil.copytree('src', out)
+        patch_tool_tests.copytree('src', out)
     src = out if inplace else 'src'
     dst = out
     pch = 'pch'
@@ -246,8 +252,8 @@ def test_diff(patch_tool_tests, inplace, resilience):
 def test_validate_failure(patch_tool_tests, dir, type):
     shutil.rmtree('dsv', ignore_errors=True)
     shutil.rmtree('inv', ignore_errors=True)
-    shutil.copytree('dst', 'dsv')
-    shutil.copytree('dst', 'inv')
+    patch_tool_tests.copytree('dst', 'dsv')
+    patch_tool_tests.copytree('dst', 'inv')
     patch_tool_tests.initialize('dsv', 'inv', 'pch')
     with pytest.raises(ValueError):
         random_file = random.choice(list(patch_tool_tests.iterate_files('dst'))).name
