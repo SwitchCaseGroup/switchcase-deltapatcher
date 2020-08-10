@@ -222,9 +222,7 @@ class PatchTool:
 
     def apply(self):
         # read the manifest file
-        self.trace(f'Reading manifest...')
-        with open(os.path.join(self.pch, 'manifest.json'), 'r') as inpfile:
-            self.manifest = json.load(inpfile)
+        self.read_manifest()
 
         # create destination directories, in tree order, applying manifest permissions
         for (name, entry) in sorted(self.iterate_manifest('dst', True), key=lambda tuple: tuple[0]):
@@ -295,6 +293,15 @@ class PatchTool:
                 xdelta3.add_patch(XDelta3Patch(abs_dst_filename, None, self.manifest['pch'][pch_filename]['zip']))
                 yield xdelta3
 
+    def read_manifest(self):
+        self.trace(f'Reading manifest...')
+        with open(os.path.join(self.pch, 'manifest.json'), 'r') as inpfile:
+            self.manifest = json.load(inpfile)
+
+        # check manifest version
+        if self.manifest['metadata']['manifest']['version'] > 1.0:
+            self.error(f'Manifest version {self.manifest["metadata"]["manifest"]["version"]} > 1.0!')
+
     def iterate_manifest(self, dir, dirs=False):
         for (name, entry) in self.manifest[dir].items():
             if ('sha1' not in entry) == dirs:
@@ -337,9 +344,7 @@ class PatchTool:
 
     def validate(self):
         # read the manifest file
-        self.trace(f'Reading manifest...')
-        with open(os.path.join(self.pch, 'manifest.json'), 'r') as inpfile:
-            self.manifest = json.load(inpfile)
+        self.read_manifest()
 
         # generate local hashes
         self.trace(f'Generating hashes...')
@@ -368,9 +373,7 @@ class PatchTool:
 
     def analyze(self):
         # read the manifest file
-        self.trace(f'Reading manifest...')
-        with open(os.path.join(self.pch, 'manifest.json'), 'r') as inpfile:
-            self.manifest = json.load(inpfile)
+        self.read_manifest()
 
         # populate src/dst manifest with files/dirs metadata
         local_manifest = defaultdict(dict)
@@ -381,7 +384,7 @@ class PatchTool:
                     attr: getattr(entry, attr) for attr in ['uid', 'gid', 'mode', 'size', 'mtime']
                 }
 
-        # determine what savings there would be with case-insensitive src/dst keying
+        # determine what savings there could be with case-insensitive src/dst keying
         self.trace(f'Searching for case insensitive src/dst matches...')
         case_insensitive_size = 0
         upper = {src_entry.upper(): src_entry for src_entry in local_manifest['src']}
@@ -391,7 +394,7 @@ class PatchTool:
                 self.trace(f'{dst_entry} => {upper[dst_entry.upper()]}: {file_size:,} bytes')
                 case_insensitive_size += file_size
 
-        # determine what savings there would be with filename matching
+        # determine what savings there could be with filename matching
         self.trace(f'Searching for potentially moved files...')
         src_filenames = {os.path.basename(entry.path): entry for entry in self.iterate_files('dst')}
         dst_filenames = {os.path.basename(entry.path): entry for entry in self.iterate_files('src')}
@@ -403,7 +406,7 @@ class PatchTool:
                     self.trace(f'{src_entry.name} => {dst_entry.name}: {dst_entry.size:,} bytes')
                     moved_file_size += src_entry.size
 
-        # determine what savings there could be detecting patch sizes smaller than source size
+        # determine what savings there would be detecting patch sizes larger than source size
         self.trace(f'Searching for large patches...')
         large_patch_size = 0
         for (src_filename, src_entry) in self.iterate_manifest('src'):
@@ -416,7 +419,7 @@ class PatchTool:
 
         print(f'Case insensitive savings could be at most {case_insensitive_size:,} bytes')
         print(f'Moved file savings could be at most {moved_file_size:,} bytes')
-        print(f'Large patch savings could be {large_patch_size:,} bytes')
+        print(f'Large patch savings would be {large_patch_size:,} bytes')
 
     def trace(self, str):
         trace(self.verbose, str)
