@@ -244,10 +244,9 @@ class PatchTool:
         self.trace(f'Applying file properties...')
         for (name, entry) in self.manifest['dst'].items():
             dst_filename = os.path.join(self.dst, name)
-            timestamp = datetime.strptime(entry['mtime'], '%Y-%m-%dT%H:%M:%S.%f').timestamp()
             os.chmod(dst_filename, entry['mode'])
             os.chown(dst_filename, entry['uid'], entry['gid'])
-            os.utime(dst_filename, times=(timestamp, timestamp))
+            os.utime(dst_filename, times=(entry['mtime'], entry['mtime']))
 
         # remove any files not in the manifest
         for entry in [entry for entry in self.iterate_files('dst') if entry.name not in self.manifest['dst']]:
@@ -441,7 +440,7 @@ class ManifestEntry:
         self.uid = stat_ret.st_uid
         self.gid = stat_ret.st_gid
         self.size = stat_ret.st_size
-        self.mtime = datetime.fromtimestamp(stat_ret.st_mtime).isoformat()
+        self.mtime = stat_ret.st_mtime
 
 
 class XDelta3Patch:
