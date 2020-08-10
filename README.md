@@ -1,7 +1,11 @@
 # interactivefitness-deltapatcher
 
-This is delta patching software which uses [Xdelta](http://xdelta.org/) to create change sets of files allowing for storing these delta files to
-patch a file to the new version without only needing to know the differences.
+This is delta patching software which extends [Xdelta](http://xdelta.org/) to patch directories instead of just individual files. Source and destination directories are analyzed to determine differences, and a patch directory representing their differences in generated. This patch folder can then be used to reconstruct the destination directory from the original source directory.
+
+| Tool         | Source    | Destination | Patch         |
+| ------------ | --------- | ----------- | ------------- |
+| XDelta3      | file1.dat | file2.dat   | patch.xdelta3 |
+| patchtool.py | folder1/  | folder2/    | patch/        |
 
 
 ## Setup
@@ -14,9 +18,10 @@ On ubuntu this can be installed as follows:
 apt-get install python3-full xdelta3
 ```
 
-## Usage
 
-```bash
+## Command-line usage
+
+```
 usage: patchtool.py [-h] [-s SRC] [-d DST] -p PCH [-x [SPLIT [SPLIT ...]]]
                     [-c {bz2,gzip,none}] [-v]
                     [{generate,apply,validate,analyze}]
@@ -26,62 +31,28 @@ Example to generate patch directory, apply it and then validate:
   python3 patchtool.py apply -s src_dir -d out_dir -p patch_dir
   python3 patchtool.py validate -s src_dir -d out_dir -p patch_dir
 
-Patching can also be done in-place, over top of the source directory:
-  python3 patchtool.py generate -s src_dir -d dst_dir -p patch_dir
-  python3 patchtool.py apply -s src_dir -d src_dir -p patch_dir
-  python3 patchtool.py validate -d src_dir -p patch_dir
-
-Patch apply uses atomic file operations. If the process is interrupted,
-the apply command can be run again to resume patching.
-
-Validation can be done on either one or both of src/dst directories:
-  python3 patchtool.py validate -s src_dir -d dst_dir -p patch_dir
-  python3 patchtool.py validate -s src_dir -p patch_dir
-  python3 patchtool.py validate -d dst_dir -p patch_dir
-
-This allows a patch to be validated before and/or after in-place patching.
-
-Patch apply will continue after errors by default, progressing as far into the patch process as 
-possible. The process will return a nonzero exit code to denote that an error has occurred. Future
-calls to apply will recognize which files have already been patched and they will be skipped. To
-stop patching immediately on the first error, you can specify the --stop-on-error argument.
-
-positional arguments:
-  {generate,apply,validate,analyze}
-                        command
-
-optional arguments:
-  -h, --help            show this help message and exit
-  -s SRC, --src SRC     source directory
-  -d DST, --dst DST     destination directory
-  -p PCH, --patch PCH   patch directory
-  -x [SPLIT [SPLIT ...]], --split [SPLIT [SPLIT ...]]
-                        zero or more split file extensions
-  -c {bz2,gzip,none}, --zip {bz2,gzip,none}
-                        patch file zip
-  -v, --verbose         increase verbosity
 ```
 
 
 ## Performance
 
-With arbitrary hardware looking to patch ExpressoGame with Unreal Engine 4.14.3 to Unreal Engine 4.25.1 we saw the following results.
+With arbitrary hardware looking to patch ExpressoGame with Unreal Engine 4.14.3 to Unreal Engine 4.25.1 we saw the following results with bzip compression enabled. 
 
 | Task         | Elapsed Time |
-|--------------|--------------|
-| Generation   |  3m 48s      |
-| Copy of 4.25 |  7m 35s      |
-| Apply        |  4m 15s      |
+| ------------ | ------------ |
+| Generation   | 3m 48s       |
+| Copy of 4.25 | 7m 35s       |
+| Apply        | 4m 15s       |
 
 ## Patch size
 
 Generating a patch between ExpressoGame versions, we saw the following results for patch size.
 
-|  Directory   |  Size (GB)   |
-|--------------|--------------|
-|  4.14.3      |  36.10 GB    |
-|  4.25.1      |  35.90 GB    |
-|  Patch       |   0.99 GB    |
+| Directory | Size (GB) |
+| --------- | --------- |
+| 4.14.3    | 36.10 GB  |
+| 4.25.1    | 35.90 GB  |
+| Patch     | 0.99 GB   |
 
 ## Style
 
