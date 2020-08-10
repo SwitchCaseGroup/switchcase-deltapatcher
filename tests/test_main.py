@@ -29,8 +29,8 @@ class PatchToolTests(PatchTool):
     chance_split = (20, 60)
     chance_add = (60, 70)
 
-    def __init__(self):
-        super().__init__(['uasset', 'umap'], "bz2", stop_on_error=True, verbose=False)
+    def __init__(self, zip):
+        super().__init__(['uasset', 'umap'], zip, stop_on_error=True, verbose=False)
         # repeatability
         random.seed(0)
         # configure test directories
@@ -179,9 +179,9 @@ class PatchToolTests(PatchTool):
             shutil.rmtree(os.path.abspath(self.get_out_dir(inplace, resilience)), ignore_errors=True)
 
 
-@pytest.fixture(scope="module")
-def patch_tool_tests():
-    return PatchToolTests()
+@pytest.fixture(scope="module", params=["none", "bz2", "gzip"])
+def patch_tool_tests(request):
+    return PatchToolTests(request.param)
 
 
 def test_prepare(patch_tool_tests):
