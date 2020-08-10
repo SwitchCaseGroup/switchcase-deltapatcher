@@ -367,20 +367,27 @@ class PatchTool:
                     self.error(f'{entry.path}: missing from manifest!')
 
     def analyze(self):
+        # read the manifest file
+        self.trace(f'Reading manifest...')
+        with open(os.path.join(self.pch, 'manifest.json'), 'r') as inpfile:
+            self.manifest = json.load(inpfile)
+
         # populate src/dst manifest with files/dirs metadata
+        local_manifest = defaultdict(dict)
+        self.trace(f'Collecting local file metadata...')
         for dir in ['src', 'dst']:
             for entry in getattr(self, f'{dir}_files').values():
-                self.manifest[dir][entry.name] = {
+                local_manifest[dir][entry.name] = {
                     attr: getattr(entry, attr) for attr in ['uid', 'gid', 'mode', 'size', 'mtime']
                 }
 
         # determine what savings there would be with case-insensitive src/dst keying
         self.trace(f'Searching for case insensitive src/dst matches...')
         case_insensitive_size = 0
-        upper = {src_entry.upper(): src_entry for src_entry in self.manifest['src']}
-        for dst_entry in self.manifest['dst']:
-            if dst_entry.upper() in upper and dst_entry not in self.manifest['src']:
-                file_size = self.manifest["dst"][dst_entry]["size"]
+        upper = {src_entry.upper(): src_entry for src_entry in local_manifest['src']}
+        for dst_entry in local_manifest['dst']:
+            if dst_entry.upper() in upper and dst_entry not in local_manifest['src']:
+                file_size = local_manifest["dst"][dst_entry]["size"]
                 self.trace(f'{dst_entry} => {upper[dst_entry.upper()]}: {file_size:,} bytes')
                 case_insensitive_size += file_size
 
@@ -396,8 +403,20 @@ class PatchTool:
                     self.trace(f'{src_entry.name} => {dst_entry.name}: {dst_entry.size:,} bytes')
                     moved_file_size += src_entry.size
 
+        # determine what savings there could be detecting patch sizes smaller than source size
+        self.trace(f'Searching for large patches...')
+        large_patch_size = 0
+        for (src_filename, src_entry) in self.iterate_manifest('src'):
+            for dst_filename, pch_filename in src_entry.get('xdelta3', {}).items():
+                dst_size = self.manifest['dst'][dst_filename]['size']
+                pch_size = self.manifest['pch'][pch_filename]['size']
+                if pch_size > dst_size:
+                    self.trace(f'pch_size: {pch_size} > dst_size: {dst_size}')
+                    large_patch_size += (pch_size - dst_size)
+
         print(f'Case insensitive savings could be at most {case_insensitive_size:,} bytes')
         print(f'Moved file savings could be at most {moved_file_size:,} bytes')
+        print(f'Large patch savings could be {large_patch_size:,} bytes')
 
     def trace(self, str):
         trace(self.verbose, str)
