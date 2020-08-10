@@ -156,7 +156,7 @@ class PatchToolTests(PatchTool):
 
     def get_out_dir(self, inplace, resilience):
         return f'out{"_inplace" if inplace else ""}{"_resilience" if resilience else ""}'
-        
+
     def copytree(self, src, dst):
         try:
             shutil.copytree(src, dst)
