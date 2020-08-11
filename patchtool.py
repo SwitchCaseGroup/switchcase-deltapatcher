@@ -576,10 +576,13 @@ class XDelta3:
 
     def replace(self, src, dst):
         try:
-            os.replace(src, dst)
-        except PermissionError:
-            os.chmod(dst, stat.S_IWRITE)
-            os.replace(src, dst)
+            try:
+                os.replace(src, dst)
+            except PermissionError:
+                os.chmod(dst, stat.S_IWRITE)
+                os.replace(src, dst)
+        except FileNotFoundError:
+            pass
 
     def trace(self, text):
         if self.verbose:
