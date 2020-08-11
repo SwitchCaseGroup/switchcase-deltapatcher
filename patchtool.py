@@ -440,7 +440,7 @@ class ManifestEntry:
         self.uid = stat_ret.st_uid
         self.gid = stat_ret.st_gid
         self.size = stat_ret.st_size
-        self.mtime = stat_ret.st_mtime
+        self.mtime = int(stat_ret.st_mtime)
 
 
 class XDelta3Patch:
