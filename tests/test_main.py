@@ -163,11 +163,6 @@ class PatchToolTests(PatchTool):
         except:
             pass
 
-    def execute(self, command, verbose=False, silent=False):
-        self.trace(command)
-        subprocess.check_call(command + ["--verbose"] if verbose else command, universal_newlines=True,
-                              stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL if silent else None)
-
     def cleanup(self):
         shutil.rmtree(os.path.abspath('src'), ignore_errors=True)
         shutil.rmtree(os.path.abspath('dst'), ignore_errors=True)
@@ -245,7 +240,17 @@ def test_validate_src_only(patch_tool_tests, inplace, resilience):
 @pytest.mark.parametrize("inplace, resilience", [(False, False), (False, True), (True, False), (True, True)])
 def test_diff(patch_tool_tests, inplace, resilience):
     out = patch_tool_tests.get_out_dir(inplace, resilience)
-    patch_tool_tests.execute(['diff', '-q', '-r', 'dst', out])
+    command = ['diff', '-q', '-r', 'dst', out]
+    subprocess.check_call(command, universal_newlines=True, stderr=subprocess.DEVNULL, stdout=None)
+
+
+@pytest.mark.parametrize("inplace, resilience", [(False, False), (False, True), (True, False), (True, True)])
+def test_rsync(patch_tool_tests, inplace, resilience):
+    out = patch_tool_tests.get_out_dir(inplace, resilience)
+    command = ['rsync', '-avzpni', '--del', 'dst/', out]
+    output = subprocess.check_output(command, universal_newlines=True)
+    if len(output.splitlines()) > 5:
+        raise ValueError(output)
 
 
 @pytest.mark.parametrize("dir, type", product(["manifest", "dsv", "inv"], ["add", "modify", "remove", "permissions"]))
