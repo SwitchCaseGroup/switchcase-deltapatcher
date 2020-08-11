@@ -76,7 +76,7 @@ Generating a patch between ExpressoGame versions, we saw the following patch fol
 | --------- | -------- | ------- | ------- |
 | 4.14.3    | 36.10 GB | -       | -       |
 | 4.25.1    | 35.90 GB | -       | -       |
-| Patch     | 1.75 GB  | 1.03 GB | 1.03 GB |
+| Patch     | 1.75 GB  | 0.99 GB | 1.03 GB |
 
 ## Style
 
