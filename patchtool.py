@@ -232,13 +232,13 @@ class PatchTool:
         for xdelta3 in self.pool.imap_unordered(XDelta3.apply_patches, self.apply_queue(False)):
             self.has_error = self.has_error or xdelta3.has_error
             if self.has_error and self.stop_on_error:
-                raise ValueError("Stopping on error.")
+                return
 
         # perform patching in parallel (dependencies)
         for xdelta3 in self.pool.imap_unordered(XDelta3.apply_patches, self.apply_queue(True)):
             self.has_error = self.has_error or xdelta3.has_error
             if self.has_error and self.stop_on_error:
-                raise ValueError("Stopping on error.")
+                return
 
         # apply file properties
         self.trace(f'Applying file properties...')
@@ -531,7 +531,7 @@ class XDelta3:
                     with open(self.src_filename, "rb") as inpfile:
                         self.atomic_replace_pipe(patch.dst_filename, inpfile.read(), unzip=patch.zip)
             except:
-                print(f'WARNING: Failed to apply patch: {sys.exc_info()[1]}')
+                print(f'ERROR: Failed to apply patch: {sys.exc_info()[1]}')
                 self.has_error = True
         return self
 
