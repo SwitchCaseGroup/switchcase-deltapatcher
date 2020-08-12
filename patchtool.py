@@ -232,13 +232,13 @@ class PatchTool:
         for xdelta3 in self.pool.imap_unordered(XDelta3.apply_patches, self.apply_queue(False)):
             self.has_error = self.has_error or xdelta3.has_error
             if self.has_error and self.stop_on_error:
-                return
+                sys.exit(1)
 
         # perform patching in parallel (dependencies)
         for xdelta3 in self.pool.imap_unordered(XDelta3.apply_patches, self.apply_queue(True)):
             self.has_error = self.has_error or xdelta3.has_error
             if self.has_error and self.stop_on_error:
-                return
+                sys.exit(1)
 
         # apply file properties
         self.trace(f'Applying file properties...')
