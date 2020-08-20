@@ -37,7 +37,7 @@ Patch apply uses atomic file operations. If the process is interrupted,
 the apply command can be run again to resume patching.
 
 Validation can be done on either one or both of src/dst directories:
-  python3 patchtool.py validate -s dst_dir -d out_dir -p patch_dir
+  python3 patchtool.py validate -s src_dir -d out_dir -p patch_dir
   python3 patchtool.py validate -s src_dir -p patch_dir
   python3 patchtool.py validate -d dst_dir -p patch_dir
 
@@ -365,7 +365,7 @@ class PatchTool:
                 # make sure each file attribute in the manifest matches the local file attribute
                 for attr in [attr for attr in ['uid', 'gid', 'mode', 'size', 'mtime'] if attr in entry]:
                     if getattr(dir_files[filename], attr) != entry[attr]:
-                        print(f'{abs_filename}: {attr} mismatch in {dir}')
+                        self.error(f'{abs_filename}: {attr} mismatch in {dir}')
             for entry in (self.iterate_files(dir) if dir == 'pch' else self.iterate_all(dir)):
                 if entry.name != 'manifest.json' and entry.name not in self.manifest[dir]:
                     self.error(f'{entry.path}: missing from manifest!')
