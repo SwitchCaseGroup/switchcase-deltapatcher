@@ -259,6 +259,7 @@ def test_validate_failure(patch_tool_tests, dir, type):
     shutil.rmtree('inv', ignore_errors=True)
     patch_tool_tests.copytree('dst', 'dsv')
     patch_tool_tests.copytree('dst', 'inv')
+    os.sync()
     patch_tool_tests.initialize('dsv', 'inv', 'pch')
     with pytest.raises(ValueError):
         random_file = random.choice(list(patch_tool_tests.iterate_files('dst'))).name
