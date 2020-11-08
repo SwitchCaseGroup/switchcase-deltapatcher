@@ -1,6 +1,7 @@
 import pytest
 import subprocess
 import argparse
+import tempfile
 import random
 import shutil
 import json
@@ -33,6 +34,8 @@ class PatchToolTests(PatchTool):
         super().__init__(['uasset', 'umap'], zip, stop_on_error=True, verbose=False)
         # repeatability
         random.seed(0)
+        # work within temp directory
+        os.chdir(tempfile.gettempdir())
         # configure test directories
         self.out = os.path.abspath('out')
         self.cleanup()
@@ -259,8 +262,8 @@ def test_validate_failure(patch_tool_tests, dir, type):
     shutil.rmtree('inv', ignore_errors=True)
     patch_tool_tests.copytree('dst', 'dsv')
     patch_tool_tests.copytree('dst', 'inv')
-    os.sync()
     patch_tool_tests.initialize('dsv', 'inv', 'pch')
+    patch_tool_tests.generate()
     with pytest.raises(ValueError):
         random_file = random.choice(list(patch_tool_tests.iterate_files('dst'))).name
         if dir == "manifest":
