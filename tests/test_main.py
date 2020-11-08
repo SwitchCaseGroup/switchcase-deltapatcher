@@ -45,6 +45,7 @@ class PatchToolTests(PatchTool):
     def __del__(self):
         # remove test data
         self.cleanup()
+        super().__del__()
 
     def prepare(self):
         # randomize contents of src and pch
@@ -190,6 +191,11 @@ def test_prepare(patch_tool_tests):
 def test_generate(patch_tool_tests):
     patch_tool_tests.initialize('src', 'dst', 'pch')
     patch_tool_tests.generate()
+
+
+def test_analyze(patch_tool_tests):
+    patch_tool_tests.initialize('src', 'dst', 'pch')
+    patch_tool_tests.analyze()
 
 
 @pytest.mark.parametrize("inplace, resilience", [(False, False), (False, True), (True, False), (True, True)])
