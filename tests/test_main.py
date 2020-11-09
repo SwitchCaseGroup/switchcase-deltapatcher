@@ -247,6 +247,18 @@ def test_validate_src_only(patch_tool_tests, inplace, resilience):
 
 
 @pytest.mark.parametrize("inplace, resilience", [(False, False), (False, True), (True, False), (True, True)])
+def test_validate_patch_sizes(patch_tool_tests, inplace, resilience):
+    out = patch_tool_tests.get_out_dir(inplace, resilience)
+    patch_tool_tests.initialize('src', out, 'pch')
+    with open(os.path.join('pch', 'manifest.json'), 'r') as inpfile:
+        local_manifest = json.load(inpfile)
+    for (_, src_entry) in patch_tool_tests.iterate_manifest('src'):
+        for _, pch_filename in src_entry.get('xdelta3', {}).items():
+            if local_manifest['pch'][pch_filename]['size'] > src_entry['size']:
+                raise ValueError("Patch size greater than source file size")
+
+
+@pytest.mark.parametrize("inplace, resilience", [(False, False), (False, True), (True, False), (True, True)])
 def test_diff(patch_tool_tests, inplace, resilience):
     out = patch_tool_tests.get_out_dir(inplace, resilience)
     command = ['diff', '-q', '-r', 'dst', out]
