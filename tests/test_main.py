@@ -1,6 +1,7 @@
 import pytest
 import subprocess
 import argparse
+import tempfile
 import random
 import shutil
 import json
@@ -33,6 +34,8 @@ class PatchToolTests(PatchTool):
         super().__init__(['uasset', 'umap'], zip, stop_on_error=True, verbose=False)
         # repeatability
         random.seed(0)
+        # work within temp directory
+        os.chdir(tempfile.gettempdir())
         # configure test directories
         self.out = os.path.abspath('out')
         self.cleanup()
@@ -42,6 +45,7 @@ class PatchToolTests(PatchTool):
     def __del__(self):
         # remove test data
         self.cleanup()
+        super().__del__()
 
     def prepare(self):
         # randomize contents of src and pch
@@ -189,6 +193,11 @@ def test_generate(patch_tool_tests):
     patch_tool_tests.generate()
 
 
+def test_analyze(patch_tool_tests):
+    patch_tool_tests.initialize('src', 'dst', 'pch')
+    patch_tool_tests.analyze()
+
+
 @pytest.mark.parametrize("inplace, resilience", [(False, False), (False, True), (True, False), (True, True)])
 def test_apply(patch_tool_tests, inplace, resilience):
     out = patch_tool_tests.get_out_dir(inplace, resilience)
@@ -238,6 +247,18 @@ def test_validate_src_only(patch_tool_tests, inplace, resilience):
 
 
 @pytest.mark.parametrize("inplace, resilience", [(False, False), (False, True), (True, False), (True, True)])
+def test_validate_patch_sizes(patch_tool_tests, inplace, resilience):
+    out = patch_tool_tests.get_out_dir(inplace, resilience)
+    patch_tool_tests.initialize('src', out, 'pch')
+    with open(os.path.join('pch', 'manifest.json'), 'r') as inpfile:
+        local_manifest = json.load(inpfile)
+    for (_, src_entry) in patch_tool_tests.iterate_manifest('src'):
+        for _, pch_filename in src_entry.get('xdelta3', {}).items():
+            if local_manifest['pch'][pch_filename]['size'] > src_entry['size']:
+                raise ValueError("Patch size greater than source file size")
+
+
+@pytest.mark.parametrize("inplace, resilience", [(False, False), (False, True), (True, False), (True, True)])
 def test_diff(patch_tool_tests, inplace, resilience):
     out = patch_tool_tests.get_out_dir(inplace, resilience)
     command = ['diff', '-q', '-r', 'dst', out]
@@ -260,6 +281,7 @@ def test_validate_failure(patch_tool_tests, dir, type):
     patch_tool_tests.copytree('dst', 'dsv')
     patch_tool_tests.copytree('dst', 'inv')
     patch_tool_tests.initialize('dsv', 'inv', 'pch')
+    patch_tool_tests.generate()
     with pytest.raises(ValueError):
         random_file = random.choice(list(patch_tool_tests.iterate_files('dst'))).name
         if dir == "manifest":
