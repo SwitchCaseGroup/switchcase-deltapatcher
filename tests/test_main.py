@@ -338,7 +338,7 @@ def test_validate_failure(patch_tool_tests, dir, type):
 @pytest.mark.parametrize("dir, type", product(["src-http", "dst-http"], ["modify", "remove", "permissions"]))
 def test_http_fallback(patch_tool_tests, dir, type):
     # start HTTP server for destination files
-    server = subprocess.Popen([sys.executable, '-m', 'http.server', '8080', '--bind', '127.0.0.1'], cwd='dst')
+    server = subprocess.Popen([sys.executable, '-m', 'http.server', '8080', '--bind', 'localhost'], cwd='dst')
     # run tests with HTTP fallback
     patch_tool_tests.base = "http://localhost:8080/"
     failure_tests(patch_tool_tests, 'src-http', 'dst-http', 'pch-http', dir, type)
