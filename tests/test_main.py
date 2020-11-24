@@ -345,7 +345,7 @@ def test_http_fallback(patch_tool_tests, dir, type):
     # exception could leave zombie workers, re-init to flush the pool
     patch_tool_tests.initialize('src-http', 'dst-http', 'pch-http')
     patch_tool_tests.apply()
-    patch_tool_tests.initialize('dst', 'dst-http', 'pch')
+    patch_tool_tests.initialize('dst', 'dst-http', 'pch-http')
     patch_tool_tests.validation_dirs = 'd'
     patch_tool_tests.validate()
     # stop http server
