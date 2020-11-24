@@ -47,13 +47,14 @@ This allows a patch to be validated before and/or after in-place patching.
 
 
 class PatchTool:
-    def __init__(self, split, zip, stop_on_error, verbose):
+    def __init__(self, split, zip, stop_on_error, base, verbose):
         self.split = split
         self.verbose = verbose
         self.manifest = defaultdict(dict)
         self.pool = None
         self.zip = zip
         self.stop_on_error = stop_on_error
+        self.base = base
         self.create_pool()
 
     def __del__(self):
@@ -142,6 +143,31 @@ class PatchTool:
         # generate metadata for manifest file
         self.generate_metadata()
 
+        # ch46001: use source file if delta patch is larger than source file
+        for (_, src_entry) in self.iterate_manifest('src'):
+            if 'xdelta3' in src_entry:
+                # iterate through the delta patches
+                for dst_filename, pch_filename in src_entry['xdelta3'].copy().items():
+                    # if this delta patch is larger than its source file, replace it
+                    if self.manifest['pch'][pch_filename]['size'] >= src_entry['size']:
+                        # revert the delta patch in the manifest and on disk
+                        del self.manifest['pch'][pch_filename]
+                        del src_entry['xdelta3'][dst_filename]
+                        remove(os.path.join(self.pch, pch_filename))
+                        # copy the source file directly into patch directory
+                        shutil.copyfile(os.path.join(self.dst, dst_filename), os.path.join(self.pch, dst_filename))
+                        # update manifest with the newsource patch
+                        self.manifest['pch'][dst_filename] = {
+                            'sha1': self.manifest['dst'][dst_filename]['sha1'],
+                            'size': self.manifest['dst'][dst_filename]['size'],
+                            'zip': 'none',
+                            'dst': dst_filename
+                        }
+                # tidy up if all xdelta3 entries were replaced
+                if len(src_entry['xdelta3']) == 0:
+                    del src_entry['xdelta3']
+                    del src_entry['sha1']
+
         # write the manifest file
         self.trace(f'Writing manifest...')
         with open(os.path.join(self.pch, 'manifest.json'), 'w') as outfile:
@@ -220,30 +246,12 @@ class PatchTool:
             for entry in self.iterate_files(dir):
                 self.manifest["metadata"][f'{dir}_size'] += entry.size
 
-        # ch46001: use source file if delta patch is larger than source file
-        for (_, src_entry) in self.iterate_manifest('src'):
-            if 'xdelta3' in src_entry:
-                # iterate through the delta patches
-                for dst_filename, pch_filename in src_entry['xdelta3'].copy().items():
-                    # if this delta patch is larger than its source file, replace it
-                    if self.manifest['pch'][pch_filename]['size'] >= src_entry['size']:
-                        # revert the delta patch in the manifest and on disk
-                        del self.manifest['pch'][pch_filename]
-                        del src_entry['xdelta3'][dst_filename]
-                        remove(os.path.join(self.pch, pch_filename))
-                        # copy the source file directly into patch directory
-                        shutil.copyfile(os.path.join(self.dst, dst_filename), os.path.join(self.pch, dst_filename))
-                        # update manifest with the newsource patch
-                        self.manifest['pch'][dst_filename] = {
-                            'sha1': self.manifest['dst'][dst_filename]['sha1'],
-                            'size': self.manifest['dst'][dst_filename]['size'],
-                            'zip': 'none',
-                            'dst': dst_filename
-                        }
-                # tidy up if all xdelta3 entries were replaced
-                if len(src_entry['xdelta3']) == 0:
-                    del src_entry['xdelta3']
-                    del src_entry['sha1']
+        # save http base, if specified
+        if self.base:
+            self.manifest['metadata']['http'] = {
+                'base': self.base,
+                'type': 'sha1'
+            }
 
     def apply(self):
         # read the manifest file
@@ -684,12 +692,14 @@ if __name__ == "__main__":
                             choices=["bz2", "gzip", "none"], default="bz2", help='patch file zip')
     arg_parser.add_argument('-e', '--stop-on-error', dest='stop_on_error',
                             action="store_true", help='stop patching files immediately after the first error')
+    arg_parser.add_argument('-b', '--base', dest='base',
+                            required=False, help='http base url')
     arg_parser.add_argument('-v', '--verbose', dest='verbose',
                             action="store_true", help='increase verbosity')
     args = arg_parser.parse_args()
 
     try:
-        patch_tool = PatchTool(args.split, args.zip, args.stop_on_error, args.verbose)
+        patch_tool = PatchTool(args.split, args.zip, args.stop_on_error, args.base, args.verbose)
         patch_tool.initialize(args.src, args.dst, args.pch)
         getattr(globals()['PatchTool'], args.command)(patch_tool)
         sys.exit(1 if patch_tool.has_error else 0)
