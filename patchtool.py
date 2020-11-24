@@ -731,7 +731,7 @@ if __name__ == "__main__":
     arg_parser.add_argument('-b', '--base', dest='base',
                             required=False, help='http base url')
     arg_parser.add_argument('-vdirs', '--validation_dirs', dest='validation_dirs', default="sdp",
-                            help='specify one or more directories to validate against manifest (s: src, d: dst, p: pch) e.g. -vdirs sdp')
+                            help='directories to validate against manifest (s: src, d: dst, p: pch) e.g. -vdirs sdp')
     arg_parser.add_argument('-v', '--verbose', dest='verbose',
                             action="store_true", help='increase verbosity')
     args = arg_parser.parse_args()

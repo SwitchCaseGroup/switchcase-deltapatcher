@@ -325,7 +325,8 @@ def failure_tests(patch_tool_tests, src, dst, pch, dir, type):
     patch_tool_tests.initialize(src, dst, pch)
 
 
-@pytest.mark.parametrize("dir, type", product(["manifest", "src-fail", "dst-fail"], ["add", "modify", "remove", "permissions"]))
+@pytest.mark.parametrize("dir, type", product(["manifest", "src-fail", "dst-fail"],
+                                              ["add", "modify", "remove", "permissions"]))
 def test_validate_failure(patch_tool_tests, dir, type):
     with pytest.raises(ValueError):
         failure_tests(patch_tool_tests, 'src-fail', 'dst-fail', 'pch-fail', dir, type)
