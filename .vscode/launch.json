@@ -5,7 +5,7 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python - Debug Emulator (generate)",
+            "name": "Python - Debug patchtool (generate)",
             "type": "python",
             "request": "launch",
             "program": "patchtool.py",
@@ -23,7 +23,7 @@
             "console": "integratedTerminal"
         },
         {
-            "name": "Python - Debug Emulator (apply)",
+            "name": "Python - Debug patchtool (apply)",
             "type": "python",
             "request": "launch",
             "program": "patchtool.py",
@@ -39,7 +39,7 @@
             "console": "integratedTerminal"
         },
         {
-            "name": "Python - Debug Emulator (validate)",
+            "name": "Python - Debug patchtool (validate)",
             "type": "python",
             "request": "launch",
             "program": "patchtool.py",
@@ -53,6 +53,6 @@
                 "/tmp/test-pch"
             ],
             "console": "integratedTerminal"
-        },
+        }
     ]
 }

@@ -173,12 +173,6 @@ class PatchToolTests(PatchTool):
         shutil.rmtree(os.path.abspath('dst'), ignore_errors=True)
         shutil.rmtree(os.path.abspath('out'), ignore_errors=True)
         shutil.rmtree(os.path.abspath('pch'), ignore_errors=True)
-        shutil.rmtree(os.path.abspath('src-fail'), ignore_errors=True)
-        shutil.rmtree(os.path.abspath('dst-fail'), ignore_errors=True)
-        shutil.rmtree(os.path.abspath('pch-fail'), ignore_errors=True)
-        shutil.rmtree(os.path.abspath('src-http'), ignore_errors=True)
-        shutil.rmtree(os.path.abspath('dst-http'), ignore_errors=True)
-        shutil.rmtree(os.path.abspath('pch-http'), ignore_errors=True)
         for (inplace, resilience) in [(False, False), (False, True), (True, False), (True, True)]:
             shutil.rmtree(os.path.abspath(self.get_out_dir(inplace, resilience)), ignore_errors=True)
 
@@ -284,11 +278,11 @@ def failure_tests(patch_tool_tests, src, dst, pch, dir, type):
     shutil.rmtree(src, ignore_errors=True)
     shutil.rmtree(dst, ignore_errors=True)
     shutil.rmtree(pch, ignore_errors=True)
-    patch_tool_tests.copytree('dst', src)
+    patch_tool_tests.copytree('src', src)
     patch_tool_tests.copytree('dst', dst)
+    patch_tool_tests.copytree('pch', pch)
     patch_tool_tests.initialize(src, dst, pch)
-    patch_tool_tests.generate()
-    random_file = random.choice(list(patch_tool_tests.iterate_files('dst'))).name
+    random_file = random.choice(list(patch_tool_tests.iterate_files('src' if dir == src else 'dst'))).name
     if dir == "manifest":
         with open(os.path.join(pch, 'manifest.json'), 'r') as inpfile:
             local_manifest = json.load(inpfile)
@@ -345,7 +339,7 @@ def test_http_fallback(patch_tool_tests, dir, type):
     # exception could leave zombie workers, re-init to flush the pool
     patch_tool_tests.initialize('src-http', 'dst-http', 'pch-http')
     patch_tool_tests.apply()
-    patch_tool_tests.initialize('dst', 'dst-http', 'pch-http')
+    patch_tool_tests.initialize('src', 'dst-http', 'pch-http')
     patch_tool_tests.validation_dirs = 'd'
     patch_tool_tests.validate()
     # stop http server
