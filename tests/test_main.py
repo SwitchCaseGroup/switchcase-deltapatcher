@@ -31,7 +31,7 @@ class PatchToolTests(PatchTool):
     chance_add = (60, 70)
 
     def __init__(self, zip):
-        super().__init__(['uasset', 'umap'], zip, stop_on_error=True, verbose=False)
+        super().__init__(['uasset', 'umap'], zip, stop_on_error=True, base=None, verbose=False)
         # repeatability
         random.seed(0)
         # work within temp directory
