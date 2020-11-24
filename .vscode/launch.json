@@ -1,0 +1,56 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python - Debug Emulator (generate)",
+            "type": "python",
+            "request": "launch",
+            "program": "patchtool.py",
+            "args": [
+                "generate",
+                "-s",
+                "tests/test-src",
+                "-d",
+                "tests/test-dst",
+                "-p",
+                "/tmp/test-pch"
+            ],
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Python - Debug Emulator (apply)",
+            "type": "python",
+            "request": "launch",
+            "program": "patchtool.py",
+            "args": [
+                "apply",
+                "-s",
+                "tests/test-src",
+                "-d",
+                "/tmp/test-dst",
+                "-p",
+                "/tmp/test-pch"
+            ],
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Python - Debug Emulator (validate)",
+            "type": "python",
+            "request": "launch",
+            "program": "patchtool.py",
+            "args": [
+                "generate",
+                "-s",
+                "tests/test-src",
+                "-d",
+                "/tmp/test-dst",
+                "-p",
+                "/tmp/test-pch"
+            ],
+            "console": "integratedTerminal"
+        },
+    ]
+}
