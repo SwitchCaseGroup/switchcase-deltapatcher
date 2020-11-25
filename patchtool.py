@@ -278,6 +278,16 @@ class PatchTool:
             if self.has_error and self.stop_on_error:
                 raise ValueError("Failed to apply")
 
+        # remove any files not in the manifest
+        for entry in [entry for entry in self.iterate_files('dst') if entry.name not in self.manifest['dst']]:
+            self.trace(f'Removing {entry.name}...')
+            remove(os.path.join(self.dst, entry.name))
+
+        # remove any directories not in the manifest
+        for entry in [entry for entry in self.iterate_dirs('dst') if entry.name not in self.manifest['dst']]:
+            self.trace(f'Removing {entry.name}...')
+            shutil.rmtree(os.path.join(self.dst, entry.name), ignore_errors=True)
+
         # apply file properties
         self.trace(f'Applying file properties...')
         for (name, entry) in self.manifest['dst'].items():
@@ -288,16 +298,6 @@ class PatchTool:
                 os.chown(dst_filename, entry['uid'], entry['gid'])
             if 'mtime' in entry:
                 os.utime(dst_filename, times=(entry['mtime'], entry['mtime']))
-
-        # remove any files not in the manifest
-        for entry in [entry for entry in self.iterate_files('dst') if entry.name not in self.manifest['dst']]:
-            self.trace(f'Removing {entry.name}...')
-            remove(os.path.join(self.dst, entry.name))
-
-        # remove any directories not in the manifest
-        for entry in [entry for entry in self.iterate_dirs('dst') if entry.name not in self.manifest['dst']]:
-            self.trace(f'Removing {entry.name}...')
-            shutil.rmtree(os.path.join(self.dst, entry.name), ignore_errors=True)
 
     def apply_queue(self, sources):
         # search for files which need to be copied or patched from source dir
