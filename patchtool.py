@@ -6,7 +6,6 @@
 import multiprocessing
 import subprocess
 import argparse
-import requests
 import hashlib
 import signal
 import shutil
@@ -21,6 +20,7 @@ import io
 from datetime import datetime
 from functools import partial
 from collections import defaultdict
+from urllib.request import Request, urlopen
 
 HTTP_CHUNK_SIZE = 1 * 1024 * 1024
 
@@ -604,12 +604,15 @@ class XDelta3:
             url = self.base + os.path.relpath(patch.dst_filename, patch.dst)
             self.trace(f'Downloading {url} to {patch.dst_filename}')
             # fetch the missing file range
-            headers = {"Range": f'bytes={0}-{patch.dst_size}'}
+            request = Request(url)
+            request.add_header('Range', f'bytes={0}-{patch.dst_size}')
             data = bytearray()
-            with requests.get(url, headers=headers, stream=True) as download:
-                download.raise_for_status()
-                for chunk in download.iter_content(chunk_size=HTTP_CHUNK_SIZE):
-                    data += chunk
+            response = urlopen(request)
+            while True:
+                chunk = response.read(HTTP_CHUNK_SIZE)
+                if not chunk:
+                    break
+                data += chunk
             # atomic replace the downloaded file to the destination
             self.atomic_replace_pipe(patch.dst_filename, data, sha1=patch.dst_sha1)
         except:
