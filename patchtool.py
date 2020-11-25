@@ -595,26 +595,44 @@ class XDelta3:
 
             # fallback to direct download if patch failed
             if self.has_error and self.base:
+                self.has_error = False
                 self.direct_download(patch)
+            # try again with clean download if patch still failed
+            if self.has_error and self.base:
+                self.has_error = False
+                self.direct_download(patch, resume=False)
+
         return self
 
-    def direct_download(self, patch):
-        self.has_error = False
+    def direct_download(self, patch, resume=True):
+        tmp_filename = f'{patch.dst_filename}.tmp'
+        url = self.base + os.path.relpath(patch.dst_filename, patch.dst)
+        self.trace(f'Downloading {url} to {patch.dst_filename}')
         try:
-            url = self.base + os.path.relpath(patch.dst_filename, patch.dst)
-            self.trace(f'Downloading {url} to {patch.dst_filename}')
-            # fetch the missing file range
-            request = Request(url)
-            request.add_header('Range', f'bytes={0}-{patch.dst_size}')
-            data = bytearray()
-            response = urlopen(request)
-            while True:
-                chunk = response.read(HTTP_CHUNK_SIZE)
-                if not chunk:
-                    break
-                data += chunk
-            # atomic replace the downloaded file to the destination
-            self.atomic_replace_pipe(patch.dst_filename, data, sha1=patch.dst_sha1)
+            # download to temporary file while hashing its contents
+            hash = hashlib.sha1()
+            with open(tmp_filename, 'ab+' if resume else 'wb') as tmpfile:
+                size = tmpfile.tell()
+                if size > 0:
+                    tmpfile.seek(0)
+                    hash.update(tmpfile.read())
+                request = Request(url)
+                request.add_header('Range', f'bytes={size}-{patch.dst_size}')
+                response = urlopen(request)
+                while True:
+                    chunk = response.read(HTTP_CHUNK_SIZE)
+                    if not chunk:
+                        break
+                    hash.update(chunk)
+                    tmpfile.write(chunk)
+                tmpfile.flush()
+                os.fsync(tmpfile.fileno())
+            # validate the digest
+            digest = hash.hexdigest()
+            if patch.dst_sha1 != digest:
+                self.error(f'Hash mismatch for {tmp_filename}!')
+            # perform atomic replace of temporary file
+            self.replace(tmp_filename, patch.dst_filename)
         except:
             print(f'ERROR: Failed to direct download: {sys.exc_info()[1]}')
             self.has_error = True
