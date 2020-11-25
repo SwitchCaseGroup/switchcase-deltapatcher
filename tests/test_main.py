@@ -45,31 +45,43 @@ class PatchToolTests(PatchTool):
 
     def __init__(self, zip):
         super().__init__(['uasset', 'umap'], zip, stop_on_error=True,
-                         base='http://localhost:8080/', validation_dirs='sdp', verbose=True)
+                         base='http://localhost:8080/', validation_dirs='sdp', verbose=False)
         # repeatability
         random.seed(0)
         # work within temp directory
         os.chdir(tempfile.gettempdir())
         # configure test directories
         self.out = os.path.abspath('out')
-        self.cleanup()
         # initialize state
         self.sequence_number = 0
         self.http = None
+        self.cleanup()
 
     def __del__(self):
         # remove test data
         self.cleanup()
         super().__del__()
 
+    def cleanup(self):
+        shutil.rmtree(os.path.abspath('src'), ignore_errors=True)
+        shutil.rmtree(os.path.abspath('dst'), ignore_errors=True)
+        shutil.rmtree(os.path.abspath('out'), ignore_errors=True)
+        shutil.rmtree(os.path.abspath('pch'), ignore_errors=True)
+        for (inplace, resilience) in [(False, False), (False, True), (True, False), (True, True)]:
+            shutil.rmtree(os.path.abspath(self.get_out_dir(inplace, resilience)), ignore_errors=True)
+        self.stop_http()
+
     def start_http(self, http_dir):
         self.http = multiprocessing.Process(target=http_server, args=(http_dir,))
         self.http.start()
 
     def stop_http(self):
+        print("stopping http")
         if self.http:
+            print("terminating")
             self.http.terminate()
             self.http.join()
+            self.http = None
 
     def prepare(self):
         # randomize contents of src and pch
@@ -79,7 +91,6 @@ class PatchToolTests(PatchTool):
         self.generate_random(self.out, self.target_size)
         self.initialize('src', 'dst', 'pch')
         self.permute_dir(self.src, self.dst, self.iterate_files('src'))
-        self.stop_http()
 
     def generate_random(self, path, size):
         while size:
@@ -192,18 +203,12 @@ class PatchToolTests(PatchTool):
         except:
             pass
 
-    def cleanup(self):
-        shutil.rmtree(os.path.abspath('src'), ignore_errors=True)
-        shutil.rmtree(os.path.abspath('dst'), ignore_errors=True)
-        shutil.rmtree(os.path.abspath('out'), ignore_errors=True)
-        shutil.rmtree(os.path.abspath('pch'), ignore_errors=True)
-        for (inplace, resilience) in [(False, False), (False, True), (True, False), (True, True)]:
-            shutil.rmtree(os.path.abspath(self.get_out_dir(inplace, resilience)), ignore_errors=True)
-
 
 @pytest.fixture(scope="module", params=["none", "bz2", "gzip"])
 def patch_tool_tests(request):
-    return PatchToolTests(request.param)
+    patch_tool_tests = PatchToolTests(request.param)
+    yield patch_tool_tests
+    del patch_tool_tests
 
 
 def test_prepare(patch_tool_tests):
@@ -335,7 +340,7 @@ def random_failure(files, dir, type, pch):
                     os.chmod(full_path, stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
 
 
-def corrupt_files(patch_tool_tests, src, dst, pch, dir, type, STOP=False):
+def corrupt_files(patch_tool_tests, src, dst, pch, dir, type):
     shutil.rmtree(src, ignore_errors=True)
     shutil.rmtree(dst, ignore_errors=True)
     shutil.rmtree(pch, ignore_errors=True)
@@ -345,8 +350,6 @@ def corrupt_files(patch_tool_tests, src, dst, pch, dir, type, STOP=False):
     patch_tool_tests.copytree('pch', pch)
     patch_tool_tests.initialize(src, dst, pch)
     random_failure([file.name for file in patch_tool_tests.iterate_files('src' if dir == src else 'dst')], dir, type, pch)
-    if STOP:
-        sys.exit(1)
     patch_tool_tests.initialize(src, dst, pch)
 
 
@@ -369,19 +372,21 @@ def test_http_fallback(patch_tool_tests, dir, type):
                     for x in Path('corrupt').glob('*') if x.is_file()], 'corrupt', "modify", None)
     # run http server with corrupted files first, then again with uncorrupted files
     for http_dir in ['corrupt', 'dst']:
-        # start HTTP server for destination files
         patch_tool_tests.start_http(http_dir)
-        # perform corruption
-        corrupt_files(patch_tool_tests, 'src-http', 'dst-http', 'pch-http', dir, type, STOP=False)
-        # exception could leave zombie workers, re-init to flush the pool
-        patch_tool_tests.initialize('src-http', 'dst-http', 'pch-http')
-        # expect error if http fallback is corrupted
-        if http_dir == 'corrupt':
-            with pytest.raises(ValueError):
+        try:
+            # perform corruption
+            corrupt_files(patch_tool_tests, 'src-http', 'dst-http', 'pch-http', dir, type)
+            # exception could leave zombie workers, re-init to flush the pool
+            patch_tool_tests.initialize('src-http', 'dst-http', 'pch-http')
+            # expect error if http fallback is corrupted
+            if http_dir == 'corrupt':
+                with pytest.raises(ValueError):
+                    patch_tool_tests.apply()
+            else:
                 patch_tool_tests.apply()
-        else:
-            patch_tool_tests.apply()
-        # stop http server
+        except:
+            patch_tool_tests.stop_http()
+            raise
         patch_tool_tests.stop_http()
 
     # validate all the files/manifest

@@ -4,9 +4,9 @@
 #
 
 import multiprocessing
-import urllib.request
 import subprocess
 import argparse
+import requests
 import hashlib
 import signal
 import shutil
@@ -21,6 +21,8 @@ import io
 from datetime import datetime
 from functools import partial
 from collections import defaultdict
+
+HTTP_CHUNK_SIZE = 1 * 1024 * 1024
 
 description = f'''
 
@@ -313,6 +315,7 @@ class PatchTool:
                     patch = XDelta3Patch(self.dst, abs_dst_filename, abs_pch_filename,
                                          self.manifest['pch'][pch_filename]['zip'])
                     patch.dst_sha1 = self.manifest['dst'][dst_filename]['sha1']
+                    patch.dst_size = self.manifest['dst'][dst_filename]['size']
                     patch.pch_sha1 = self.manifest['pch'][pch_filename]['sha1']
                     xdelta3.add_patch(patch)
             # queue up patches for destination files to be directly copied from source directory
@@ -321,6 +324,7 @@ class PatchTool:
                     abs_dst_filename = os.path.join(self.dst, src_filename)
                     patch = XDelta3Patch(self.dst, abs_dst_filename, None, False)
                     patch.dst_sha1 = src_entry['sha1']
+                    patch.dst_size = src_entry['size']
                     xdelta3.add_patch(patch)
             yield xdelta3
 
@@ -333,6 +337,7 @@ class PatchTool:
                 xdelta3.src_sha1 = self.manifest['pch'][pch_filename]['sha1']
                 patch = XDelta3Patch(self.dst, abs_dst_filename, None, self.manifest['pch'][pch_filename]['zip'])
                 patch.dst_sha1 = self.manifest['dst'][pch_entry['dst']]['sha1']
+                patch.dst_size = self.manifest['dst'][pch_entry['dst']]['size']
                 xdelta3.add_patch(patch)
                 yield xdelta3
 
@@ -499,6 +504,7 @@ class XDelta3Patch:
         self.dst_filename = dst_filename
         self.pch_filename = pch_filename
         self.dst_sha1 = None
+        self.dst_size = None
         self.pch_sha1 = None
         self.zip = zip
 
@@ -589,7 +595,6 @@ class XDelta3:
 
             # fallback to direct download if patch failed
             if self.has_error and self.base:
-                print(f'Fallback to direct download: {patch.dst_filename}')
                 self.direct_download(patch)
         return self
 
@@ -597,9 +602,16 @@ class XDelta3:
         self.has_error = False
         try:
             url = self.base + os.path.relpath(patch.dst_filename, patch.dst)
-            print(f'Downloading {url}')
-            with urllib.request.urlopen(url) as download:
-                self.atomic_replace_pipe(patch.dst_filename, download.read(), sha1=patch.dst_sha1)
+            self.trace(f'Downloading {url} to {patch.dst_filename}')
+            # fetch the missing file range
+            headers = {"Range": f'bytes={0}-{patch.dst_size}'}
+            data = bytearray()
+            with requests.get(url, headers=headers, stream=True) as download:
+                download.raise_for_status()
+                for chunk in download.iter_content(chunk_size=HTTP_CHUNK_SIZE):
+                    data += chunk
+            # atomic replace the downloaded file to the destination
+            self.atomic_replace_pipe(patch.dst_filename, data, sha1=patch.dst_sha1)
         except:
             print(f'ERROR: Failed to direct download: {sys.exc_info()[1]}')
             self.has_error = True
