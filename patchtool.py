@@ -50,14 +50,14 @@ This allows a patch to be validated before and/or after in-place patching.
 
 
 class PatchTool:
-    def __init__(self, split, zip, stop_on_error, base, validation_dirs, verbose):
+    def __init__(self, split, zip, stop_on_error, http_base, validation_dirs, verbose):
         self.split = split
         self.verbose = verbose
         self.manifest = defaultdict(dict)
         self.pool = None
         self.zip = zip
         self.stop_on_error = stop_on_error
-        self.base = base
+        self.http_base = http_base
         self.validation_dirs = validation_dirs
         self.create_pool()
 
@@ -183,7 +183,7 @@ class PatchTool:
         self.trace(f'Creating deltas for modified files...')
         for (src, dsts) in self.generate_merged():
             # create deltas relative to this source file
-            xdelta3 = XDelta3(self.base, self.verbose, src.path)
+            xdelta3 = XDelta3(self.http_base, self.verbose, src.path)
             xdelta3.src_size = src.size
             # iterate through our destination files, looking for matches
             for dst in dsts:
@@ -200,7 +200,7 @@ class PatchTool:
         self.trace(f'Copying added files...')
         for dst in [dst for dst in self.iterate_files('dst') if 'sha1' not in self.manifest['dst'][dst.name]]:
             pch_filename = os.path.join(self.pch, dst.name)
-            xdelta3 = XDelta3(self.base, self.verbose, None)
+            xdelta3 = XDelta3(self.http_base, self.verbose, None)
             xdelta3.add_patch(XDelta3Patch(self.dst, dst.path, pch_filename, self.zip))
             yield xdelta3
 
@@ -252,9 +252,9 @@ class PatchTool:
                 self.manifest["metadata"][f'{dir}_size'] += entry.size
 
         # save http base, if specified
-        if self.base:
+        if self.http_base:
             self.manifest['metadata']['http'] = {
-                'base': self.base,
+                'base': self.http_base,
                 'type': 'sha1'
             }
 
@@ -303,7 +303,7 @@ class PatchTool:
         # search for files which need to be copied or patched from source dir
         self.trace(f'Patching files ({"sources" if sources else "dependents"})...')
         for (src_filename, src_entry) in self.iterate_manifest('src'):
-            xdelta3 = XDelta3(self.base, self.verbose, os.path.join(self.src, src_filename))
+            xdelta3 = XDelta3(self.http_base, self.verbose, os.path.join(self.src, src_filename))
             xdelta3.src_sha1 = src_entry['sha1']
             xdelta3.src_size = src_entry['size']
             # queue up patches for destination files which are deltas from a source file
@@ -333,7 +333,7 @@ class PatchTool:
             if 'dst' in pch_entry:
                 abs_dst_filename = os.path.join(self.dst, pch_entry['dst'])
                 abs_pch_filename = os.path.join(self.pch, pch_filename)
-                xdelta3 = XDelta3(self.base, self.verbose, abs_pch_filename)
+                xdelta3 = XDelta3(self.http_base, self.verbose, abs_pch_filename)
                 xdelta3.src_sha1 = self.manifest['pch'][pch_filename]['sha1']
                 patch = XDelta3Patch(self.dst, abs_dst_filename, None, self.manifest['pch'][pch_filename]['zip'])
                 patch.dst_sha1 = self.manifest['dst'][pch_entry['dst']]['sha1']
@@ -351,7 +351,7 @@ class PatchTool:
             self.error(f'Manifest version {self.manifest["metadata"]["manifest"]["version"]} > 1.0!')
 
         # parse http base (if available)
-        self.base = self.manifest['metadata'].get('http', {'base': None})['base']
+        self.http_base = self.manifest['metadata'].get('http', {'base': None})['base']
 
     def iterate_manifest(self, dir, dirs=False):
         for (name, entry) in self.manifest[dir].items():
@@ -510,8 +510,8 @@ class XDelta3Patch:
 
 
 class XDelta3:
-    def __init__(self, base, verbose, src_filename):
-        self.base = base
+    def __init__(self, http_base, verbose, src_filename):
+        self.http_base = http_base
         self.verbose = verbose
         self.src_filename = src_filename
         self.src_sha1 = None
@@ -594,19 +594,19 @@ class XDelta3:
                 self.has_error = True
 
             # fallback to direct download if patch failed
-            if self.has_error and self.base:
+            if self.has_error and self.http_base:
                 self.has_error = False
-                self.direct_download(patch)
+                self.download(patch)
             # try again with clean download if patch still failed
-            if self.has_error and self.base:
+            if self.has_error and self.http_base:
                 self.has_error = False
-                self.direct_download(patch, resume=False)
+                self.download(patch, resume=False)
 
         return self
 
-    def direct_download(self, patch, resume=True):
+    def download(self, patch, resume=True):
         tmp_filename = f'{patch.dst_filename}.tmp'
-        url = self.base + os.path.relpath(patch.dst_filename, patch.dst)
+        url = self.http_base + os.path.relpath(patch.dst_filename, patch.dst)
         self.trace(f'Downloading {url} to {patch.dst_filename}')
         try:
             # download to temporary file while hashing its contents
@@ -761,8 +761,10 @@ if __name__ == "__main__":
                             choices=["bz2", "gzip", "none"], default="bz2", help='patch file zip')
     arg_parser.add_argument('-e', '--stop-on-error', dest='stop_on_error',
                             action="store_true", help='stop patching files immediately after the first error')
-    arg_parser.add_argument('-b', '--base', dest='base',
+    arg_parser.add_argument('-hb', '--http_base', dest='http_base',
                             required=False, help='http base url')
+    arg_parser.add_argument('-hc', '--http_command', dest='http_command',
+                            required=False, help='http download command')
     arg_parser.add_argument('-vdirs', '--validation_dirs', dest='validation_dirs', default="sdp",
                             help='directories to validate against manifest (s: src, d: dst, p: pch) e.g. -vdirs sdp')
     arg_parser.add_argument('-v', '--verbose', dest='verbose',
@@ -770,7 +772,7 @@ if __name__ == "__main__":
     args = arg_parser.parse_args()
 
     try:
-        patch_tool = PatchTool(args.split, args.zip, args.stop_on_error, args.base, args.validation_dirs, args.verbose)
+        patch_tool = PatchTool(args.split, args.zip, args.stop_on_error, args.http_base, args.validation_dirs, args.verbose)
         patch_tool.initialize(args.src, args.dst, args.pch)
         getattr(globals()['PatchTool'], args.command)(patch_tool)
         sys.exit(1 if patch_tool.has_error else 0)

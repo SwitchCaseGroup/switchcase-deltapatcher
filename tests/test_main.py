@@ -45,7 +45,7 @@ class PatchToolTests(PatchTool):
 
     def __init__(self, zip):
         super().__init__(['uasset', 'umap'], zip, stop_on_error=True,
-                         base='http://localhost:8080/', validation_dirs='sdp', verbose=False)
+                         http_base='http://localhost:8080/', validation_dirs='sdp', verbose=False)
         # repeatability
         random.seed(0)
         # work within temp directory
