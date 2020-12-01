@@ -361,14 +361,11 @@ class PatchTool:
 
         # parse http parameters (if available)
         http = self.manifest['metadata'].get('http', {})
-        self.http_base = http.get('base', self.http_base)
-        self.http_tool = http.get('tool', self.http_tool)
-        self.http_user = http.get('user', self.http_user)
-        self.http_pass = http.get('pass', self.http_pass)
-        self.trace(f'http_base: {self.http_base}')
-        self.trace(f'http_tool: {self.http_tool}')
-        self.trace(f'http_user: {self.http_user}')
-        self.trace(f'http_pass: {self.http_pass}')
+        for param in [ "base", "tool", "user", "pass" ]:
+            value = getattr(self, f'http_{param}')
+            value = value if value is not None else http.get(param, None)
+            setattr(self, f'http_{param}', value)
+            self.trace(f'http_{param}: {value}')
 
     def iterate_manifest(self, dir, dirs=False):
         for (name, entry) in self.manifest[dir].items():
