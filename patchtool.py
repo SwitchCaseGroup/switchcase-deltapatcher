@@ -365,6 +365,10 @@ class PatchTool:
         self.http_tool = http.get('tool', self.http_tool)
         self.http_user = http.get('user', self.http_user)
         self.http_pass = http.get('pass', self.http_pass)
+        self.trace(f'http_base: {self.http_base}')
+        self.trace(f'http_tool: {self.http_tool}')
+        self.trace(f'http_user: {self.http_user}')
+        self.trace(f'http_pass: {self.http_pass}')
 
     def iterate_manifest(self, dir, dirs=False):
         for (name, entry) in self.manifest[dir].items():
