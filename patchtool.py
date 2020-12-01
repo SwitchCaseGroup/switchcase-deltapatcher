@@ -636,6 +636,7 @@ class XDelta3:
                 environ['HTTP_PASS'] = self.http_pass if self.http_pass else ''
                 process = execute_pipe(self.http_tool, env=environ, shell=True)
                 process.wait()
+                self.trace(process.stdout.read().decode('utf-8').strip())
                 with open(tmp_filename, 'ab+') as tmpfile:
                     tmpfile.flush()
                     os.fsync(tmpfile.fileno())
@@ -721,7 +722,7 @@ class XDelta3:
             pass
 
     def trace(self, text):
-        if self.verbose:
+        if self.verbose and len(text):
             print(text)
 
     def error(self, str):
@@ -729,7 +730,7 @@ class XDelta3:
 
 
 def trace(verbose, text):
-    if verbose:
+    if verbose and len(text):
         print(text)
 
 
