@@ -639,6 +639,9 @@ class XDelta3:
                 environ['HTTP_PASS'] = self.http_pass if self.http_pass else ''
                 process = execute_pipe(self.http_tool, env=environ, shell=True)
                 process.wait()
+                with open(tmp_filename, 'ab+') as tmpfile:
+                    tmpfile.flush()
+                    os.fsync(tmpfile.fileno())
                 hash.update(open(tmp_filename, 'rb').read())
             # download to temporary file while hashing its contents
             else:
