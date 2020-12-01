@@ -6,6 +6,7 @@ import random
 import signal
 import shutil
 import pytest
+import base64
 import json
 import stat
 import sys
@@ -21,10 +22,41 @@ from patchtool import PatchTool
 from itertools import product
 
 
+class AuthHTTPRequestHandler(RangeRequestHandler):
+    """ Main class to present webpages and authentication. """
+
+    def __init__(self, *args, **kwargs):
+        self._auth = base64.b64encode(f"test:pass".encode()).decode()
+        super().__init__(*args, **kwargs)
+
+    def do_HEAD(self):
+        self.send_response(200)
+        self.send_header("Content-type", "text/html")
+        self.end_headers()
+
+    def do_AUTHHEAD(self):
+        self.send_response(401)
+        self.send_header("WWW-Authenticate", 'Basic realm="Test"')
+        self.send_header("Content-type", "text/html")
+        self.end_headers()
+
+    def do_GET(self):
+        """ Present frontpage with user authentication. """
+        if self.headers.get("Authorization") == None:
+            self.do_AUTHHEAD()
+            self.wfile.write(b"no auth header received")
+        elif self.headers.get("Authorization") == "Basic " + self._auth:
+            RangeRequestHandler.do_GET(self)
+        else:
+            self.do_AUTHHEAD()
+            self.wfile.write(self.headers.get("Authorization").encode())
+            self.wfile.write(b"not authenticated")
+
+
 def http_server(dir):
     os.chdir(dir)
     address = ('localhost', 8080)
-    server = HTTPServer(address, RangeRequestHandler)
+    server = HTTPServer(address, AuthHTTPRequestHandler)
     server.serve_forever()
 
 
@@ -45,7 +77,7 @@ class PatchToolTests(PatchTool):
 
     def __init__(self, zip):
         super().__init__(['uasset', 'umap'], zip, stop_on_error=True,
-                         http_base='http://localhost:8080/', validation_dirs='sdp', verbose=False)
+                         http_base='http://localhost:8080/', http_tool=None, http_user='test', http_pass='pass', validation_dirs='sdp', verbose=False)
         # repeatability
         random.seed(0)
         # work within temp directory
