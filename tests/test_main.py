@@ -398,13 +398,18 @@ def test_validate_failure(patch_tool_tests, dir, type):
     patch_tool_tests.initialize('src-fail', 'dst-fail', 'pch-fail')
 
 
-@pytest.mark.parametrize("http_type, type", product(["modify", "shrink"], ["modify", "remove"]))
-def test_http_fallback(patch_tool_tests, http_type, type):
+@pytest.mark.parametrize("http_tool, http_type, type", product(["wget", None], ["modify", "shrink"], ["modify", "remove"]))
+def test_http_fallback(patch_tool_tests, http_tool, http_type, type):
     # generate corrupted version of destination file to provide corrupted downloads
     shutil.rmtree('corrupt', ignore_errors=True)
     shutil.rmtree('valid', ignore_errors=True)
     patch_tool_tests.copytree('dst', 'corrupt')
     patch_tool_tests.copytree('dst', 'valid')
+    # wget http tool
+    if http_tool == "wget":
+        patch_tool_tests.http_tool = 'wget $HTTP_URL -O $HTTP_FILE --user $HTTP_USER --password $HTTP_PASS'
+        patch_tool_tests.http_user = "test"
+        patch_tool_tests.http_pass = "pass"
     # corrupt http files
     corrupt_files([os.path.relpath(x, 'corrupt')
                    for x in Path('corrupt').glob('*') if x.is_file()], 'corrupt', http_type, None)
