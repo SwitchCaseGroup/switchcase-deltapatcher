@@ -11,7 +11,7 @@ resources:
     type: github
     endpoint: switchcase-build
     name: SwitchCaseGroup/switchcase-azure-pipelines-templates
-    ref: refs/tags/v2.2.0
+    ref: refs/tags/v3.2.0
 
 trigger:
 - master
