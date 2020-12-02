@@ -51,7 +51,7 @@ This allows a patch to be validated before and/or after in-place patching.
 
 
 class PatchTool:
-    def __init__(self, split, zip, stop_on_error, http_base, http_tool, http_user, http_pass, validation_dirs, verbose):
+    def __init__(self, split, zip, stop_on_error, http_base, http_tool, http_user, http_pass, http_comp, validation_dirs, verbose):
         self.split = split
         self.verbose = verbose
         self.manifest = defaultdict(dict)
@@ -62,6 +62,7 @@ class PatchTool:
         self.http_tool = http_tool
         self.http_user = http_user
         self.http_pass = http_pass
+        self.http_comp = http_comp
         self.validation_dirs = validation_dirs
         self.create_pool()
 
@@ -187,7 +188,8 @@ class PatchTool:
         self.trace(f'Creating deltas for modified files...')
         for (src, dsts) in self.generate_merged():
             # create deltas relative to this source file
-            xdelta3 = XDelta3(self.http_base, self.http_tool, self.http_user, self.http_pass, self.verbose, src.path)
+            xdelta3 = XDelta3(self.http_base, self.http_tool, self.http_user,
+                              self.http_pass, self.http_comp, self.verbose, src.path)
             xdelta3.src_size = src.size
             # iterate through our destination files, looking for matches
             for dst in dsts:
@@ -204,7 +206,8 @@ class PatchTool:
         self.trace(f'Copying added files...')
         for dst in [dst for dst in self.iterate_files('dst') if 'sha1' not in self.manifest['dst'][dst.name]]:
             pch_filename = os.path.join(self.pch, dst.name)
-            xdelta3 = XDelta3(self.http_base, self.http_tool, self.http_user, self.http_pass, self.verbose, None)
+            xdelta3 = XDelta3(self.http_base, self.http_tool, self.http_user,
+                              self.http_pass, self.http_comp, self.verbose, None)
             xdelta3.add_patch(XDelta3Patch(self.dst, dst.path, pch_filename, self.zip))
             yield xdelta3
 
@@ -262,6 +265,7 @@ class PatchTool:
                 'tool': self.http_tool,
                 'user': self.http_user,
                 'pass': self.http_pass,
+                'comp': self.http_comp,
                 'type': 'sha1'
             }
 
@@ -310,7 +314,7 @@ class PatchTool:
         # search for files which need to be copied or patched from source dir
         self.trace(f'Patching files ({"sources" if sources else "dependents"})...')
         for (src_filename, src_entry) in self.iterate_manifest('src'):
-            xdelta3 = XDelta3(self.http_base, self.http_tool, self.http_user, self.http_pass,
+            xdelta3 = XDelta3(self.http_base, self.http_tool, self.http_user, self.http_pass, self.http_comp,
                               self.verbose, os.path.join(self.src, src_filename))
             xdelta3.src_sha1 = src_entry['sha1']
             xdelta3.src_size = src_entry['size']
@@ -342,7 +346,7 @@ class PatchTool:
                 abs_dst_filename = os.path.join(self.dst, pch_entry['dst'])
                 abs_pch_filename = os.path.join(self.pch, pch_filename)
                 xdelta3 = XDelta3(self.http_base, self.http_tool, self.http_user,
-                                  self.http_pass, self.verbose, abs_pch_filename)
+                                  self.http_pass, self.http_comp, self.verbose, abs_pch_filename)
                 xdelta3.src_sha1 = self.manifest['pch'][pch_filename]['sha1']
                 patch = XDelta3Patch(self.dst, abs_dst_filename, None, self.manifest['pch'][pch_filename]['zip'])
                 patch.dst_sha1 = self.manifest['dst'][pch_entry['dst']]['sha1']
@@ -361,7 +365,7 @@ class PatchTool:
 
         # parse http parameters (if available)
         http = self.manifest['metadata'].get('http', {})
-        for param in [ "base", "tool", "user", "pass" ]:
+        for param in ["base", "tool", "user", "pass"]:
             value = getattr(self, f'http_{param}')
             value = value if value is not None else http.get(param, None)
             setattr(self, f'http_{param}', value)
@@ -524,11 +528,12 @@ class XDelta3Patch:
 
 
 class XDelta3:
-    def __init__(self, http_base, http_tool, http_user, http_pass, verbose, src_filename):
+    def __init__(self, http_base, http_tool, http_user, http_pass, http_comp, verbose, src_filename):
         self.http_base = http_base
         self.http_tool = http_tool
         self.http_user = http_user
         self.http_pass = http_pass
+        self.http_comp = http_comp
         self.verbose = verbose
         self.src_filename = src_filename
         self.src_sha1 = None
@@ -622,11 +627,11 @@ class XDelta3:
         return self
 
     def download(self, patch, resume=True):
-        tmp_filename = f'{patch.dst_filename}.tmp'
+        tmp_filename = f'{patch.dst_filename}.part'
         url = self.http_base + os.path.relpath(patch.dst_filename, patch.dst)
+        url = url + f'.{self.http_comp}' if self.http_comp != 'none' else url
         self.trace(f'Downloading {url} to {patch.dst_filename}')
         try:
-            hash = hashlib.sha1()
             # optionally, use an external command to download the file
             if self.http_tool:
                 environ = os.environ.copy()
@@ -634,22 +639,21 @@ class XDelta3:
                 environ['HTTP_FILE'] = tmp_filename
                 environ['HTTP_USER'] = self.http_user if self.http_user else ''
                 environ['HTTP_PASS'] = self.http_pass if self.http_pass else ''
+                environ['HTTP_COMP'] = self.http_comp if self.http_comp else ''
                 process = execute_pipe(self.http_tool, env=environ, shell=True)
                 process.wait()
                 self.trace(process.stdout.read().decode('utf-8').strip())
-                with open(tmp_filename, 'ab+') as tmpfile:
-                    tmpfile.flush()
-                    os.fsync(tmpfile.fileno())
-                hash.update(open(tmp_filename, 'rb').read())
+                data = open(tmp_filename, 'rb').read()
             # download to temporary file while hashing its contents
             else:
+                data = bytearray()
                 with open(tmp_filename, 'ab+' if resume else 'wb') as tmpfile:
                     size = tmpfile.tell()
                     if size > 0:
                         tmpfile.seek(0)
-                        hash.update(tmpfile.read())
+                        data = tmpfile.read()
                     request = Request(url)
-                    request.add_header('Range', f'bytes={size}-{patch.dst_size}')
+                    request.add_header('Range', f'bytes={size}-')
                     if self.http_user is not None:
                         base64string = base64.b64encode(f'{self.http_user}:{self.http_pass}'.encode('utf-8'))
                         request.add_header('Authorization', f'Basic {base64string.decode("utf-8")}')
@@ -658,16 +662,12 @@ class XDelta3:
                         chunk = response.read(DOWNLOAD_CHUNK_SIZE)
                         if not chunk:
                             break
-                        hash.update(chunk)
                         tmpfile.write(chunk)
+                        data += chunk
                     tmpfile.flush()
                     os.fsync(tmpfile.fileno())
-            # validate the digest
-            digest = hash.hexdigest()
-            if patch.dst_sha1 != digest:
-                self.error(f'Hash mismatch for {tmp_filename}!')
-            # perform atomic replace of temporary file
-            self.replace(tmp_filename, patch.dst_filename)
+            self.atomic_replace_pipe(patch.dst_filename, data, unzip=self.http_comp, sha1=patch.dst_sha1)
+            remove(tmp_filename)
         except:
             print(f'ERROR: Failed to direct download: {sys.exc_info()[1]}')
             self.has_error = True
@@ -689,7 +689,7 @@ class XDelta3:
         inpfile.close()
         self.atomic_replace_pipe(patch.dst_filename, data, sha1=patch.dst_sha1)
 
-    def atomic_replace_pipe(self, dst, data, zip=False, unzip=False, sha1=None):
+    def atomic_replace_pipe(self, dst, data, zip=None, unzip=None, sha1=None):
         tmp = f'{dst}.tmp'
         # copy pipe to temporary file while hashing its contents
         hash = hashlib.sha1()
@@ -804,6 +804,8 @@ if __name__ == "__main__":
                             required=False, help='http login user (basic auth)')
     arg_parser.add_argument('-hp', '--http_pass', dest='http_pass',
                             required=False, help='http login pass (basic auth)')
+    arg_parser.add_argument('-hc', '--http_comp', dest='http_comp',
+                            choices=["bz2", "gzip", "none"], default="none", help='http compression')
     arg_parser.add_argument('-vdirs', '--validation_dirs', dest='validation_dirs', default="sdp",
                             help='directories to validate against manifest (s: src, d: dst, p: pch) e.g. -vdirs sdp')
     arg_parser.add_argument('-v', '--verbose', dest='verbose',
@@ -812,7 +814,7 @@ if __name__ == "__main__":
 
     try:
         patch_tool = PatchTool(args.split, args.zip, args.stop_on_error, args.http_base,
-                               args.http_tool, args.http_user, args.http_pass, args.validation_dirs, args.verbose)
+                               args.http_tool, args.http_user, args.http_pass, args.http_comp, args.validation_dirs, args.verbose)
         patch_tool.initialize(args.src, args.dst, args.pch)
         getattr(globals()['PatchTool'], args.command)(patch_tool)
         sys.exit(1 if patch_tool.has_error else 0)

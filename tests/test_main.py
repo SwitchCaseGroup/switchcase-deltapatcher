@@ -76,8 +76,8 @@ class PatchToolTests(PatchTool):
     chance_add = (60, 70)
 
     def __init__(self, zip):
-        super().__init__(['uasset', 'umap'], zip, stop_on_error=True,
-                         http_base='http://localhost:8080/', http_tool=None, http_user='test', http_pass='pass', validation_dirs='sdp', verbose=False)
+        super().__init__(['uasset', 'umap'], zip, stop_on_error=True, http_base='http://localhost:8080/',
+                         http_tool=None, http_user='test', http_pass='pass', http_comp=zip, validation_dirs='sdp', verbose=False)
         # repeatability
         random.seed(0)
         # work within temp directory
@@ -402,14 +402,23 @@ def test_validate_failure(patch_tool_tests, dir, type):
 def test_http_fallback(patch_tool_tests, http_type, type):
     # generate corrupted version of destination file to provide corrupted downloads
     shutil.rmtree('corrupt', ignore_errors=True)
+    shutil.rmtree('valid', ignore_errors=True)
     patch_tool_tests.copytree('dst', 'corrupt')
+    patch_tool_tests.copytree('dst', 'valid')
     # corrupt http files
     corrupt_files([os.path.relpath(x, 'corrupt')
                    for x in Path('corrupt').glob('*') if x.is_file()], 'corrupt', http_type, None)
     # corrupt directories
     corrupt_dirs(patch_tool_tests, 'src-http', 'dst-http', 'pch-http', 'src-http', type)
     # run http server with corrupted files first, then again with uncorrupted files
-    for http_dir in ['corrupt', 'dst']:
+    for http_dir in ['corrupt', 'valid']:
+        # compress http files
+        if patch_tool_tests.zip != 'none':
+            zip2cmd = {'bz2': 'bzip2'}
+            find = subprocess.Popen(['find', os.path.abspath(http_dir), '-not', '-name',
+                                     f'*.{patch_tool_tests.zip}', '-type', 'f', '-print0'], stdout=subprocess.PIPE)
+            subprocess.check_output(['xargs', '-0', zip2cmd[patch_tool_tests.zip]], stdin=find.stdout)
+            find.wait()
         patch_tool_tests.start_http(http_dir)
         try:
             # exception could leave zombie workers, re-init to flush the pool
