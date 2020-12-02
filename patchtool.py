@@ -7,12 +7,14 @@ import multiprocessing
 import subprocess
 import argparse
 import hashlib
+import certifi
 import signal
 import shutil
 import base64
 import gzip
 import stat
 import json
+import ssl
 import sys
 import bz2
 import os
@@ -657,10 +659,16 @@ class XDelta3:
                         data = tmpfile.read()
                     request = Request(url)
                     request.add_header('Range', f'bytes={size}-')
+                    # handle HTTP authentication
                     if self.http_user is not None:
                         base64string = base64.b64encode(f'{self.http_user}:{self.http_pass}'.encode('utf-8'))
                         request.add_header('Authorization', f'Basic {base64string.decode("utf-8")}')
-                    response = urlopen(request)
+                    # handle HTTPS
+                    if url.lower().startswith('https'):
+                        context = ssl.create_default_context(cafile=certifi.where())
+                        response = urlopen(request, context=context)
+                    else:
+                        response = urlopen(request)
                     while True:
                         chunk = response.read(DOWNLOAD_CHUNK_SIZE)
                         if not chunk:
