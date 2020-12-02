@@ -23,7 +23,7 @@ apt-get install python3-full xdelta3
 
 ```
 usage: patchtool.py [-h] [-s SRC] [-d DST] -p PCH [-x [SPLIT [SPLIT ...]]]
-                    [-c {bz2,gzip,none}] [-v]
+                    [-c {bz2,gz,none}] [-v]
                     [{generate,apply,validate,analyze}]
 
 Example to generate patch directory, apply it and then validate:
@@ -36,7 +36,7 @@ Example to generate patch directory, apply it and then validate:
 
 ## Generate command
 
-Patch directories are created using the "generate" command. The resulting directory will contain a manifest.json and the set of differences. By default, bz2 compression is used on individual patch files to reduce total patch size. You can switch to gzip compression using "-c gzip" or disable compression entirely using "-c none" parameter.
+Patch directories are created using the "generate" command. The resulting directory will contain a manifest.json and the set of differences. By default, bz2 compression is used on individual patch files to reduce total patch size. You can switch to gzip compression using "-c gz" or disable compression entirely using "-c none" parameter.
 
 Patches may include an optional "--http_base" command which is used to construct HTTP urls to download files which fail to patch correctly. If this parameter is not specified, there will be no fallback to HTTP. Additionally, the "--http_tool" parameter can be used to specify an external command to handle file downloads. This tool will be provided the environment variables $HTTP_URL, $HTTP_FILE, $HTTP_USER, $HTTP_PASS. The built-in HTTP downloader also supports the parameters "--http_user" and "--http_pass" for basic authentication. The built-in HTTP downloader will resume failed downloads if "apply" is called again. 
 
@@ -62,21 +62,21 @@ The analyze command does a quick analysis to detect potential file size savings 
 
 With arbitrary hardware looking to patch ExpressoGame with Unreal Engine 4.14.3 to Unreal Engine 4.25.1 we saw the following elapsed times with the different compression settings enabled:
 
-| Task         | None   | bzip   | gzip   |
+| Task         | None   | bzip2  | gzip   |
 | ------------ | ------ | ------ | ------ |
 | Generation   | 3m 41s | 4m 20s | 3m 51s |
 | Copy of 4.25 | 7m 35s | -      | -      |
 | Apply        | 4m 10s | 4m 46s | 4m 17s |
 | Validate     | 1m 17s | 1m 12s | 1m 17s |
 
-Patch generate/apply operations are done using Python's multiprocessing module to distribute load across all available CPUs. Tasks are arranged to avoid any redundant hash operations and to maximize locality of file i/o. Source files are loaded into memory while being hashed, piped to xdelta3 and optionally to bz2 or gzip, then piped back to disk before being atomically swapped into place if all operations and hash checks were successful. Care is taken to avoid any unnecessary/redundant file reads or writes.
+Patch generate/apply operations are done using Python's multiprocessing module to distribute load across all available CPUs. Tasks are arranged to avoid any redundant hash operations and to maximize locality of file i/o. Source files are loaded into memory while being hashed, piped to xdelta3 and optionally to bzip2 or gzip, then piped back to disk before being atomically swapped into place if all operations and hash checks were successful. Care is taken to avoid any unnecessary/redundant file reads or writes.
 
 
 ## Patch size
 
 Generating a patch between ExpressoGame versions, we saw the following patch folder sizes with the different compression settings enabled:
 
-| Directory | None     | bzip    | gzip    |
+| Directory | None     | bzip2   | gzip    |
 | --------- | -------- | ------- | ------- |
 | 4.14.3    | 36.10 GB | -       | -       |
 | 4.25.1    | 35.90 GB | -       | -       |

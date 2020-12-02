@@ -234,7 +234,7 @@ class PatchToolTests(PatchTool):
             pass
 
 
-@pytest.fixture(scope="module", params=["none", "bz2", "gzip"])
+@pytest.fixture(scope="module", params=["none", "bz2", "gz"])
 def patch_tool_tests(request):
     patch_tool_tests = PatchToolTests(request.param)
     yield patch_tool_tests
@@ -419,7 +419,7 @@ def test_http_fallback(patch_tool_tests, http_tool, http_type, type):
     for http_dir in ['corrupt', 'valid']:
         # compress http files
         if patch_tool_tests.zip != 'none':
-            zip2cmd = {'bz2': 'bzip2', 'gzip': 'gzip'}
+            zip2cmd = {'bz2': 'bzip2', 'gz': 'gzip'}
             find = subprocess.Popen(['find', os.path.abspath(http_dir), '-not', '-name',
                                      f'*.{patch_tool_tests.zip}', '-type', 'f', '-print0'], stdout=subprocess.PIPE)
             subprocess.check_output(['xargs', '-0', zip2cmd[patch_tool_tests.zip]], stdin=find.stdout)

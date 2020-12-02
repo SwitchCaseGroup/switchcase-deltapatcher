@@ -367,7 +367,7 @@ class PatchTool:
 
         # parse http parameters (if available)
         http = self.manifest['metadata'].get('http', {})
-        for param in ["base", "tool", "user", "pass"]:
+        for param in ["base", "tool", "user", "pass", "comp"]:
             value = getattr(self, f'http_{param}')
             value = value if value is not None else http.get(param, None)
             setattr(self, f'http_{param}', value)
@@ -575,13 +575,10 @@ class XDelta3:
 
     def update_pch_filename(self, patch, delta):
         # determine whether or not to apply zip
-        if patch.zip == "bz2" and patch.pch_filename.endswith(".bz2"):
-            patch.zip = None
-        elif patch.zip == "gzip" and patch.pch_filename.endswith(".gz"):
+        if patch.zip != "none" and patch.pch_filename.endswith(f'.{patch.zip}'):
             patch.zip = None
         patch.pch_filename = f'{patch.pch_filename}.xdelta3' if delta else patch.pch_filename
-        patch.pch_filename = f'{patch.pch_filename}.gz' if patch.zip == "gzip" else patch.pch_filename
-        patch.pch_filename = f'{patch.pch_filename}.bz2' if patch.zip == "bz2" else patch.pch_filename
+        patch.pch_filename = f'{patch.pch_filename}.{patch.zip}' if patch.zip != 'none' else patch.pch_filename
 
     def apply_patches(self):
         # lazily hash source only once and only if/when necessary
@@ -631,10 +628,8 @@ class XDelta3:
     def download(self, patch, resume=True):
         tmp_filename = f'{patch.dst_filename}.part'
         url = self.http_base + os.path.relpath(patch.dst_filename, patch.dst)
-        if self.http_comp == 'bz2':
-            url += '.bz2'
-        elif self.http_comp == 'gzip':
-            url += '.gz'
+        if self.http_comp != 'none':
+            url += f'.{self.http_comp}'
         self.trace(f'Downloading {url} to {patch.dst_filename}')
         try:
             # optionally, use an external command to download the file
@@ -692,7 +687,7 @@ class XDelta3:
         process = execute_pipe(command)
         if patch.zip == "bz2":
             inpfile = bz2.open(patch.pch_filename, "rb")
-        elif patch.zip == "gzip":
+        elif patch.zip == "gz":
             inpfile = gzip.open(patch.pch_filename, "rb")
         else:
             inpfile = open(patch.pch_filename, "rb")
@@ -706,9 +701,9 @@ class XDelta3:
         hash = hashlib.sha1()
         with open(tmp, 'wb') as outfile:
             data = bz2.compress(data) if zip == "bz2" else data
-            data = gzip.compress(data) if zip == "gzip" else data
+            data = gzip.compress(data) if zip == "gz" else data
             data = bz2.decompress(data) if unzip == "bz2" else data
-            data = gzip.decompress(data) if unzip == "gzip" else data
+            data = gzip.decompress(data) if unzip == "gz" else data
             hash.update(data)
             outfile.write(data)
             outfile.flush()
@@ -804,7 +799,7 @@ if __name__ == "__main__":
     arg_parser.add_argument('-x', '--split', dest='split', default=[
                             'uasset', 'umap'], nargs="*", help='zero or more split file extensions')
     arg_parser.add_argument('-c', '--zip', dest='zip',
-                            choices=["bz2", "gzip", "none"], default="bz2", help='patch file zip')
+                            choices=["bz2", "gz", "none"], default="bz2", help='patch file zip')
     arg_parser.add_argument('-e', '--stop-on-error', dest='stop_on_error',
                             action="store_true", help='stop patching files immediately after the first error')
     arg_parser.add_argument('-hb', '--http_base', dest='http_base',
@@ -816,7 +811,7 @@ if __name__ == "__main__":
     arg_parser.add_argument('-hp', '--http_pass', dest='http_pass',
                             required=False, help='http login pass (basic auth)')
     arg_parser.add_argument('-hc', '--http_comp', dest='http_comp',
-                            choices=["bz2", "gzip", "none"], default="none", help='http compression')
+                            choices=["bz2", "gz", "none", None], default=None, help='http compression')
     arg_parser.add_argument('-vdirs', '--validation_dirs', dest='validation_dirs', default="sdp",
                             help='directories to validate against manifest (s: src, d: dst, p: pch) e.g. -vdirs sdp')
     arg_parser.add_argument('-v', '--verbose', dest='verbose',
