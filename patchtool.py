@@ -632,7 +632,7 @@ class XDelta3:
         if self.http_comp == 'bz2':
             url += '.bz2'
         elif self.http_comp == 'gzip':
-            url += '.gz'
+            url += '.gzTEST'
         self.trace(f'Downloading {url} to {patch.dst_filename}')
         try:
             # optionally, use an external command to download the file
