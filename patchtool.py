@@ -24,6 +24,7 @@ from datetime import datetime
 from functools import partial
 from collections import defaultdict
 from urllib.request import Request, urlopen
+from urllib.parse import quote_plus
 
 DOWNLOAD_CHUNK_SIZE = 1 * 1024 * 1024
 
@@ -627,7 +628,7 @@ class XDelta3:
 
     def download(self, patch, resume=True):
         tmp_filename = f'{patch.dst_filename}.part'
-        url = self.http_base + os.path.relpath(patch.dst_filename, patch.dst)
+        url = self.http_base + quote_plus(os.path.relpath(patch.dst_filename, patch.dst))
         if self.http_comp != 'none':
             url += f'.{self.http_comp}'
         self.trace(f'Downloading {url} to {patch.dst_filename}')
