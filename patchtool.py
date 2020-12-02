@@ -629,7 +629,10 @@ class XDelta3:
     def download(self, patch, resume=True):
         tmp_filename = f'{patch.dst_filename}.part'
         url = self.http_base + os.path.relpath(patch.dst_filename, patch.dst)
-        url = url + f'.{self.http_comp}' if self.http_comp != 'none' else url
+        if self.http_comp == 'bz2':
+            url += '.bz2'
+        elif self.http_comp == 'gzip':
+            url += '.gz'
         self.trace(f'Downloading {url} to {patch.dst_filename}')
         try:
             # optionally, use an external command to download the file
