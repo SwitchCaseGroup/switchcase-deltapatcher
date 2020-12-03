@@ -53,20 +53,29 @@ This allows a patch to be validated before and/or after in-place patching.
 '''
 
 
+class PatchToolSettings:
+    def __init__(self):
+        self.split = ['uasset', 'umap']
+        self.zip = 'bz2'
+        self.stop_on_error = False
+        self.http_base = None
+        self.http_tool = None
+        self.http_user = None
+        self.http_pass = None
+        self.http_comp = None
+        self.verbose = False
+        self.validation_dirs = 'sdp'
+
+
 class PatchTool:
-    def __init__(self, split, zip, stop_on_error, http_base, http_tool, http_user, http_pass, http_comp, validation_dirs, verbose):
-        self.split = split
-        self.verbose = verbose
+    def __init__(self, settings):
+        # apply settings to this instance
+        for attr, value in settings.__dict__.items():
+            self.__dict__[attr] = value
+
+        # initialize other members
         self.manifest = defaultdict(dict)
         self.pool = None
-        self.zip = zip
-        self.stop_on_error = stop_on_error
-        self.http_base = http_base
-        self.http_tool = http_tool
-        self.http_user = http_user
-        self.http_pass = http_pass
-        self.http_comp = http_comp
-        self.validation_dirs = validation_dirs
         self.create_pool()
 
     def __del__(self):
@@ -786,6 +795,10 @@ def perform_hash(verbose, filename):
 if __name__ == "__main__":
     # currently supported CLI commands
     commands = ["generate", "apply", "validate", "analyze"]
+
+    # default settings
+    settings = PatchToolSettings()
+
     # parse command-line arguments and execute the command
     arg_parser = argparse.ArgumentParser(
         description=description, formatter_class=argparse.RawTextHelpFormatter)
@@ -797,31 +810,32 @@ if __name__ == "__main__":
                             required=False, help='destination directory')
     arg_parser.add_argument('-p', '--patch', dest='pch',
                             required=True, help='patch directory')
-    arg_parser.add_argument('-x', '--split', dest='split', default=[
-                            'uasset', 'umap'], nargs="*", help='zero or more split file extensions')
+    arg_parser.add_argument('-x', '--split', dest='split', default=settings.split,
+                            nargs="*", help='zero or more split file extensions')
     arg_parser.add_argument('-c', '--zip', dest='zip',
-                            choices=["bz2", "gz", "none"], default="bz2", help='patch file zip')
+                            choices=["bz2", "gz", "none"], default=settings.zip, help='patch file zip')
     arg_parser.add_argument('-e', '--stop-on-error', dest='stop_on_error',
                             action="store_true", help='stop patching files immediately after the first error')
     arg_parser.add_argument('-hb', '--http_base', dest='http_base',
-                            required=False, help='http base url')
+                            default=settings.http_base, required=False, help='http base url')
     arg_parser.add_argument('-ht', '--http_tool', dest='http_tool',
-                            required=False, help='http download tool')
+                            default=settings.http_tool, required=False, help='http download tool')
     arg_parser.add_argument('-hu', '--http_user', dest='http_user',
-                            required=False, help='http login user (basic auth)')
+                            default=settings.http_user, required=False, help='http login user (basic auth)')
     arg_parser.add_argument('-hp', '--http_pass', dest='http_pass',
-                            required=False, help='http login pass (basic auth)')
+                            default=settings.http_pass, required=False, help='http login pass (basic auth)')
     arg_parser.add_argument('-hc', '--http_comp', dest='http_comp',
-                            choices=["bz2", "gz", "none", None], default=None, help='http compression')
-    arg_parser.add_argument('-vdirs', '--validation_dirs', dest='validation_dirs', default="sdp",
+                            default=settings.http_comp, choices=["bz2", "gz", "none", None], help='http compression')
+    arg_parser.add_argument('-vdirs', '--validation_dirs', dest='validation_dirs', default=settings.validation_dirs,
                             help='directories to validate against manifest (s: src, d: dst, p: pch) e.g. -vdirs sdp')
     arg_parser.add_argument('-v', '--verbose', dest='verbose',
                             action="store_true", help='increase verbosity')
     args = arg_parser.parse_args()
 
     try:
-        patch_tool = PatchTool(args.split, args.zip, args.stop_on_error, args.http_base,
-                               args.http_tool, args.http_user, args.http_pass, args.http_comp, args.validation_dirs, args.verbose)
+        for attr, value in args.__dict__.items():
+            settings.__dict__[attr] = value
+        patch_tool = PatchTool(settings)
         patch_tool.initialize(args.src, args.dst, args.pch)
         getattr(globals()['PatchTool'], args.command)(patch_tool)
         sys.exit(1 if patch_tool.has_error else 0)

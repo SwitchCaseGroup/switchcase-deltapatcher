@@ -18,7 +18,7 @@ from RangeHTTPServer import RangeRequestHandler
 from http.server import HTTPServer
 from pathlib import Path
 
-from patchtool import PatchTool
+from patchtool import PatchTool, PatchToolSettings
 from itertools import product
 
 
@@ -76,8 +76,14 @@ class PatchToolTests(PatchTool):
     chance_add = (60, 70)
 
     def __init__(self, zip):
-        super().__init__(['uasset', 'umap'], zip, stop_on_error=True, http_base='http://localhost:8080/',
-                         http_tool=None, http_user='test', http_pass='pass', http_comp=zip, validation_dirs='sdp', verbose=False)
+        settings = PatchToolSettings()
+        settings.zip = zip
+        settings.stop_on_error = True
+        settings.http_base = 'http://localhost:8080/'
+        settings.http_user = 'test'
+        settings.http_pass = 'pass'
+        settings.http_comp = zip
+        super().__init__(settings)
         # repeatability
         random.seed(0)
         # work within temp directory
