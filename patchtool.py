@@ -66,7 +66,7 @@ class PatchToolSettings:
         self.validation_dirs = 'sdp'
 
 
-class PatchTool:
+class PatchTool(PatchToolSettings):
     def __init__(self, settings):
         # apply settings to this instance
         for attr, value in settings.__dict__.items():
