@@ -1,9 +1,12 @@
-import pytest
+import multiprocessing
 import subprocess
-import argparse
 import tempfile
+import argparse
 import random
+import signal
 import shutil
+import pytest
+import base64
 import json
 import stat
 import sys
@@ -11,8 +14,50 @@ import re
 import os
 import io
 
-from patchtool import PatchTool
+from RangeHTTPServer import RangeRequestHandler
+from http.server import HTTPServer
+from pathlib import Path
+
+from patchtool import PatchTool, PatchToolSettings
 from itertools import product
+
+
+class AuthHTTPRequestHandler(RangeRequestHandler):
+    """ Main class to present webpages and authentication. """
+
+    def __init__(self, *args, **kwargs):
+        self._auth = base64.b64encode(f"test:pass".encode()).decode()
+        super().__init__(*args, **kwargs)
+
+    def do_HEAD(self):
+        self.send_response(200)
+        self.send_header("Content-type", "text/html")
+        self.end_headers()
+
+    def do_AUTHHEAD(self):
+        self.send_response(401)
+        self.send_header("WWW-Authenticate", 'Basic realm="Test"')
+        self.send_header("Content-type", "text/html")
+        self.end_headers()
+
+    def do_GET(self):
+        """ Present frontpage with user authentication. """
+        if self.headers.get("Authorization") == None:
+            self.do_AUTHHEAD()
+            self.wfile.write(b"no auth header received")
+        elif self.headers.get("Authorization") == "Basic " + self._auth:
+            RangeRequestHandler.do_GET(self)
+        else:
+            self.do_AUTHHEAD()
+            self.wfile.write(self.headers.get("Authorization").encode())
+            self.wfile.write(b"not authenticated")
+
+
+def http_server(dir):
+    os.chdir(dir)
+    address = ('localhost', 8080)
+    server = HTTPServer(address, AuthHTTPRequestHandler)
+    server.serve_forever()
 
 
 class PatchToolTests(PatchTool):
@@ -31,21 +76,48 @@ class PatchToolTests(PatchTool):
     chance_add = (60, 70)
 
     def __init__(self, zip):
-        super().__init__(['uasset', 'umap'], zip, stop_on_error=True, verbose=False)
+        settings = PatchToolSettings()
+        settings.zip = zip
+        settings.stop_on_error = True
+        settings.http_base = 'http://localhost:8080/'
+        settings.http_user = 'test'
+        settings.http_pass = 'pass'
+        settings.http_comp = zip
+        super().__init__(settings)
         # repeatability
         random.seed(0)
         # work within temp directory
         os.chdir(tempfile.gettempdir())
         # configure test directories
         self.out = os.path.abspath('out')
-        self.cleanup()
         # initialize state
         self.sequence_number = 0
+        self.http = None
+        self.cleanup()
 
     def __del__(self):
         # remove test data
         self.cleanup()
         super().__del__()
+
+    def cleanup(self):
+        shutil.rmtree(os.path.abspath('src'), ignore_errors=True)
+        shutil.rmtree(os.path.abspath('dst'), ignore_errors=True)
+        shutil.rmtree(os.path.abspath('out'), ignore_errors=True)
+        shutil.rmtree(os.path.abspath('pch'), ignore_errors=True)
+        for (inplace, resilience) in [(False, False), (False, True), (True, False), (True, True)]:
+            shutil.rmtree(os.path.abspath(self.get_out_dir(inplace, resilience)), ignore_errors=True)
+        self.stop_http()
+
+    def start_http(self, http_dir):
+        self.http = multiprocessing.Process(target=http_server, args=(http_dir,))
+        self.http.start()
+
+    def stop_http(self):
+        if self.http:
+            self.http.terminate()
+            self.http.join()
+            self.http = None
 
     def prepare(self):
         # randomize contents of src and pch
@@ -167,20 +239,12 @@ class PatchToolTests(PatchTool):
         except:
             pass
 
-    def cleanup(self):
-        shutil.rmtree(os.path.abspath('src'), ignore_errors=True)
-        shutil.rmtree(os.path.abspath('dst'), ignore_errors=True)
-        shutil.rmtree(os.path.abspath('out'), ignore_errors=True)
-        shutil.rmtree(os.path.abspath('pch'), ignore_errors=True)
-        shutil.rmtree(os.path.abspath('inv'), ignore_errors=True)
-        shutil.rmtree(os.path.abspath('dsv'), ignore_errors=True)
-        for (inplace, resilience) in [(False, False), (False, True), (True, False), (True, True)]:
-            shutil.rmtree(os.path.abspath(self.get_out_dir(inplace, resilience)), ignore_errors=True)
 
-
-@pytest.fixture(scope="module", params=["none", "bz2", "gzip"])
+@pytest.fixture(scope="module", params=["none", "bz2", "gz"])
 def patch_tool_tests(request):
-    return PatchToolTests(request.param)
+    patch_tool_tests = PatchToolTests(request.param)
+    yield patch_tool_tests
+    del patch_tool_tests
 
 
 def test_prepare(patch_tool_tests):
@@ -217,10 +281,11 @@ def test_apply(patch_tool_tests, inplace, resilience):
                 patch_tool_tests.initialize(src, dst, pch)
                 patch_tool_tests.apply()
             except:
-                size = len(missing) / 2
-                while len(missing) >= size:
-                    src_filename = missing.pop()
-                    os.rename(f'{src_filename}.missing', src_filename)
+                pass
+            size = len(missing) / 2
+            while len(missing) >= size:
+                src_filename = missing.pop()
+                os.rename(f'{src_filename}.missing', src_filename)
 
     patch_tool_tests.initialize(src, dst, pch)
     patch_tool_tests.apply()
@@ -274,51 +339,110 @@ def test_rsync(patch_tool_tests, inplace, resilience):
         raise ValueError(output)
 
 
-@pytest.mark.parametrize("dir, type", product(["manifest", "dsv", "inv"], ["add", "modify", "remove", "permissions"]))
-def test_validate_failure(patch_tool_tests, dir, type):
-    shutil.rmtree('dsv', ignore_errors=True)
-    shutil.rmtree('inv', ignore_errors=True)
-    patch_tool_tests.copytree('dst', 'dsv')
-    patch_tool_tests.copytree('dst', 'inv')
-    patch_tool_tests.initialize('dsv', 'inv', 'pch')
-    patch_tool_tests.generate()
-    with pytest.raises(ValueError):
-        random_file = random.choice(list(patch_tool_tests.iterate_files('dst'))).name
+def corrupt_files(files, dir, type, pch):
+    for filename in files:
         if dir == "manifest":
-            with open(os.path.join('pch', 'manifest.json'), 'r') as inpfile:
+            with open(os.path.join(pch, 'manifest.json'), 'r') as inpfile:
                 local_manifest = json.load(inpfile)
             if type == "add":
-                local_manifest["dst"]["test/bogus"] = {"sha1": "bad"}
+                local_manifest["dst"][f'{filename}/bogus'] = {"sha1": "bad"}
             elif type == "modify":
-                local_manifest["dst"][random_file]["sha1"] = "bad"
+                local_manifest["dst"][filename]["sha1"] = "bad"
             elif type == "remove":
-                del local_manifest["dst"][random_file]
+                del local_manifest["dst"][filename]
             elif type == "permissions":
-                current = local_manifest["dst"][random_file]["mode"]
+                current = local_manifest["dst"][filename]["mode"]
                 if current & stat.S_IRWXO:
-                    local_manifest["dst"][random_file]["mode"] = stat.S_IRWXU | stat.S_IRWXG
+                    local_manifest["dst"][filename]["mode"] = stat.S_IRWXU | stat.S_IRWXG
                 else:
-                    local_manifest["dst"][random_file]["mode"] = stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO
-            with open(os.path.join('pch', 'manifest.json'), 'w') as outfile:
+                    local_manifest["dst"][filename]["mode"] = stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO
+            with open(os.path.join(pch, 'manifest.json'), 'w') as outfile:
                 json.dump(local_manifest, outfile, indent=4)
         else:
             if type == "add":
                 with open(os.path.join(dir, 'added'), "wt") as outfile:
-                    print("testing", file=outfile)
+                    print(dir, file=outfile)
             elif type == "modify":
-                with open(os.path.join(dir, random_file), "wt") as outfile:
-                    print("modified", file=outfile)
+                with open(os.path.join(dir, filename), "at") as outfile:
+                    print(dir, file=outfile)
             elif type == "remove":
-                os.remove(os.path.join(dir, random_file))
+                os.remove(os.path.join(dir, filename))
+            elif type == "shrink":
+                with open(os.path.join(dir, filename), "rb") as inpfile:
+                    data = inpfile.read()
+                with open(os.path.join(dir, filename), "wb") as outfile:
+                    outfile.write(data[0:-int(len(data) / 2)])
             elif type == "permissions":
-                full_path = os.path.join(dir, random_file)
+                full_path = os.path.join(dir, filename)
                 current = stat.S_IMODE(os.stat(full_path).st_mode)
                 if current & stat.S_IRWXO:
                     os.chmod(full_path, stat.S_IRWXU | stat.S_IRWXG)
                 else:
                     os.chmod(full_path, stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
-        patch_tool_tests.initialize('dsv', 'inv', 'pch')
-        patch_tool_tests.validate()
 
+
+def corrupt_dirs(patch_tool_tests, src, dst, pch, dir, type):
+    shutil.rmtree(src, ignore_errors=True)
+    shutil.rmtree(dst, ignore_errors=True)
+    shutil.rmtree(pch, ignore_errors=True)
+    patch_tool_tests.copytree('src', src)
+    if dir != src:  # use empty dst directory when testing corrupted src, otherwise dst files would just be skipped :)
+        patch_tool_tests.copytree('dst', dst)
+    patch_tool_tests.copytree('pch', pch)
+    patch_tool_tests.initialize(src, dst, pch)
+    corrupt_files([file.name for file in patch_tool_tests.iterate_files('src' if dir == src else 'dst')], dir, type, pch)
+    patch_tool_tests.initialize(src, dst, pch)
+
+
+@pytest.mark.parametrize("dir, type", product(["manifest", "src-fail", "dst-fail"],
+                                              ["add", "modify", "remove", "permissions"]))
+def test_validate_failure(patch_tool_tests, dir, type):
+    with pytest.raises(ValueError):
+        corrupt_dirs(patch_tool_tests, 'src-fail', 'dst-fail', 'pch-fail', dir, type)
+        patch_tool_tests.validate()
     # exception could leave zombie workers, re-init to flush the pool
-    patch_tool_tests.initialize('dsv', 'inv', 'pch')
+    patch_tool_tests.initialize('src-fail', 'dst-fail', 'pch-fail')
+
+
+@pytest.mark.parametrize("http_tool, http_type, type", product(["wget", None], ["modify", "shrink"], ["modify", "remove"]))
+def test_http_fallback(patch_tool_tests, http_tool, http_type, type):
+    # generate corrupted version of destination file to provide corrupted downloads
+    shutil.rmtree('corrupt', ignore_errors=True)
+    shutil.rmtree('valid', ignore_errors=True)
+    patch_tool_tests.copytree('dst', 'corrupt')
+    patch_tool_tests.copytree('dst', 'valid')
+    # wget http tool
+    if http_tool == "wget":
+        patch_tool_tests.http_tool = 'wget $HTTP_URL -O $HTTP_FILE --user $HTTP_USER --password $HTTP_PASS'
+        patch_tool_tests.http_user = "test"
+        patch_tool_tests.http_pass = "pass"
+    # corrupt http files
+    corrupt_files([os.path.relpath(x, 'corrupt')
+                   for x in Path('corrupt').glob('*') if x.is_file()], 'corrupt', http_type, None)
+    # corrupt directories
+    corrupt_dirs(patch_tool_tests, 'src-http', 'dst-http', 'pch-http', 'src-http', type)
+    # run http server with corrupted files first, then again with uncorrupted files
+    for http_dir in ['corrupt', 'valid']:
+        # compress http files
+        if patch_tool_tests.zip != 'none':
+            zip2cmd = {'bz2': 'bzip2', 'gz': 'gzip'}
+            find = subprocess.Popen(['find', os.path.abspath(http_dir), '-not', '-name',
+                                     f'*.{patch_tool_tests.zip}', '-type', 'f', '-print0'], stdout=subprocess.PIPE)
+            subprocess.check_output(['xargs', '-0', zip2cmd[patch_tool_tests.zip]], stdin=find.stdout)
+            find.wait()
+        patch_tool_tests.start_http(http_dir)
+        try:
+            # exception could leave zombie workers, re-init to flush the pool
+            patch_tool_tests.initialize('src-http', 'dst-http', 'pch-http')
+            # expect error if http fallback is corrupted
+            if http_dir == 'corrupt':
+                with pytest.raises(ValueError):
+                    patch_tool_tests.apply()
+            else:
+                patch_tool_tests.apply()
+        finally:
+            patch_tool_tests.stop_http()
+    # validate all the files/manifest
+    patch_tool_tests.initialize('src', 'dst-http', 'pch-http')
+    patch_tool_tests.validation_dirs = 'd'
+    patch_tool_tests.validate()
