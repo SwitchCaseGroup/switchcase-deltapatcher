@@ -7,7 +7,6 @@ import multiprocessing
 import subprocess
 import argparse
 import hashlib
-import certifi
 import signal
 import shutil
 import base64
@@ -27,6 +26,7 @@ from urllib.request import Request, urlopen
 from urllib.parse import quote_plus
 
 DOWNLOAD_CHUNK_SIZE = 1 * 1024 * 1024
+CAFILE_PATH = '/etc/ssl/certs/ca-certificates.crt'
 
 description = f'''
 
@@ -670,7 +670,7 @@ class XDelta3:
                         request.add_header('Authorization', f'Basic {base64string.decode("utf-8")}')
                     # handle HTTPS
                     if url.lower().startswith('https'):
-                        context = ssl.create_default_context(cafile=certifi.where())
+                        context = ssl.create_default_context(cafile=CAFILE_PATH)
                         response = urlopen(request, context=context)
                     else:
                         response = urlopen(request)
