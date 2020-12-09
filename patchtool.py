@@ -381,6 +381,7 @@ class PatchTool(PatchToolSettings):
             value = value if value is not None else http.get(param, None)
             setattr(self, f'http_{param}', value)
             self.trace(f'http_{param}: {value}')
+        self.http_comp = self.http_comp if self.http_comp else 'none'
 
     def iterate_manifest(self, dir, dirs=False):
         for (name, entry) in self.manifest[dir].items():
