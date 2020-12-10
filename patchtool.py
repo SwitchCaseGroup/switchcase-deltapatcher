@@ -26,6 +26,7 @@ from urllib.request import Request, urlopen
 from urllib.parse import quote_plus
 
 DOWNLOAD_CHUNK_SIZE = 1 * 1024 * 1024
+DOWNLOAD_CHUNK_TIMEOUT = 60
 
 description = f'''
 
@@ -671,9 +672,9 @@ class XDelta3:
                     # handle HTTPS
                     if url.lower().startswith('https'):
                         context = ssl.create_default_context()
-                        response = urlopen(request, context=context)
+                        response = urlopen(request, context=context, timeout=DOWNLOAD_CHUNK_TIMEOUT)
                     else:
-                        response = urlopen(request)
+                        response = urlopen(request, timeout=DOWNLOAD_CHUNK_TIMEOUT)
                     while True:
                         chunk = response.read(DOWNLOAD_CHUNK_SIZE)
                         if not chunk:
