@@ -77,10 +77,10 @@ class PatchToolTests(PatchTool):
         settings = PatchToolSettings()
         settings.zip = zip
         settings.stop_on_error = True
-        settings.http_base = "http://localhost:8080/"
-        settings.http_user = "test"
-        settings.http_pass = "pass"
-        settings.http_comp = zip
+        settings.http['base'] = "http://localhost:8080/"
+        settings.http['user'] = "test"
+        settings.http['pass'] = "pass"
+        settings.http['comp'] = zip
         super().__init__(settings)
         # repeatability
         random.seed(0)
@@ -90,7 +90,7 @@ class PatchToolTests(PatchTool):
         self.out = os.path.abspath("out")
         # initialize state
         self.sequence_number = 0
-        self.http = None
+        self.http_server = None
         self.cleanup()
 
     def __del__(self):
@@ -107,14 +107,14 @@ class PatchToolTests(PatchTool):
         self.stop_http()
 
     def start_http(self, http_dir):
-        self.http = multiprocessing.Process(target=http_server, args=(http_dir,))
-        self.http.start()
+        self.http_server = multiprocessing.Process(target=http_server, args=(http_dir,))
+        self.http_server.start()
 
     def stop_http(self):
-        if self.http:
-            self.http.terminate()
-            self.http.join()
-            self.http = None
+        if self.http_server:
+            self.http_server.terminate()
+            self.http_server.join()
+            self.http_server = None
 
     def prepare(self):
         # randomize contents of src and pch
@@ -407,9 +407,9 @@ def test_http_fallback(patch_tool_tests, http_tool, http_type, file_type):
     patch_tool_tests.copytree("dst", "valid")
     # wget http tool
     if http_tool == "wget":
-        patch_tool_tests.http_tool = "wget $HTTP_URL -O $HTTP_FILE --user $HTTP_USER --password $HTTP_PASS"
-        patch_tool_tests.http_user = "test"
-        patch_tool_tests.http_pass = "pass"
+        patch_tool_tests.http['tool'] = "wget $HTTP_URL -O $HTTP_FILE --user $HTTP_USER --password $HTTP_PASS"
+        patch_tool_tests.http['user'] = "test"
+        patch_tool_tests.http['pass'] = "pass"
     # corrupt http files
     corrupt_files([os.path.relpath(x, "corrupt") for x in Path("corrupt").glob("*") if x.is_file()], "corrupt", http_type, None)
     # corrupt directories
