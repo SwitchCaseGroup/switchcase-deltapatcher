@@ -50,7 +50,6 @@ class AuthHTTPRequestHandler(RangeRequestHandler):
             g_timeout_path = self.path
         # timeout the first two attempts
         if self.path == g_timeout_path and g_timeout_count > 0:
-            time.sleep(10)  # tests are configured to timeout after 5 seconds
             g_timeout_count -= 1
             return
         if self.headers.get("Authorization") == None:

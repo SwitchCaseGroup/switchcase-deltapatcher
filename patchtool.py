@@ -282,13 +282,13 @@ class PatchTool(PatchToolSettings):
 
         # perform patching in parallel (dependent files)
         for xdelta3 in self.pool.imap_unordered(XDelta3.apply_patches, self.apply_queue(False)):
-            self.has_error = self.has_error or xdelta3.has_error
+            self.has_error = self.has_error or any([patch.has_error for patch in xdelta3.patches])
             if self.has_error and self.stop_on_error:
                 raise ValueError("Failed to apply")
 
         # perform patching in parallel (dependencies)
         for xdelta3 in self.pool.imap_unordered(XDelta3.apply_patches, self.apply_queue(True)):
-            self.has_error = self.has_error or xdelta3.has_error
+            self.has_error = self.has_error or any([patch.has_error for patch in xdelta3.patches])
             if self.has_error and self.stop_on_error:
                 raise ValueError("Failed to apply")
 
@@ -522,6 +522,7 @@ class XDelta3Patch:
         self.dst_size = None
         self.pch_sha1 = None
         self.zip = zip
+        self.has_error = False
 
 
 class XDelta3:
@@ -532,7 +533,6 @@ class XDelta3:
         self.src_sha1 = None
         self.src_size = None
         self.patches = []
-        self.has_error = False
 
     def add_patch(self, patch):
         self.patches.append(patch)
@@ -600,13 +600,13 @@ class XDelta3:
                         self.atomic_replace_pipe(patch.dst_filename, inpfile.read(), unzip=patch.zip)
             except:
                 print(f"ERROR: Failed to apply patch: {sys.exc_info()[1]}")
-                self.has_error = True
+                patch.has_error = True
 
             # fallback to direct download if patch failed
             self.tries = int(self.http.get("tries"))
-            if self.has_error and self.tries > 0 and self.http.get("base", None) is not None:
+            if patch.has_error and self.tries > 0 and self.http.get("base", None) is not None:
                 tmp_filename = f"{patch.dst_filename}.part"
-                while self.has_error and self.tries > 0:
+                while patch.has_error and self.tries > 0:
                     self.download(patch, tmp_filename)
                     self.tries -= 1
 
@@ -666,10 +666,10 @@ class XDelta3:
                     os.fsync(tmpfile.fileno())
             self.atomic_replace_pipe(patch.dst_filename, data, unzip=self.http["comp"], sha1=patch.dst_sha1)
             remove(tmp_filename)
-            self.has_error = False
+            patch.has_error = False
         except:
             print(f"ERROR: Failed to direct download: {sys.exc_info()[1]}")
-            self.has_error = True
+            patch.has_error = True
 
     def apply_xdelta3(self, patch):
         command = ["xdelta3", "-d", "-B", str(max(self.src_size, 1 * 1024 * 1024)), "-f", "-c", "-s", self.src_filename]
