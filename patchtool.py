@@ -26,8 +26,6 @@ from urllib.request import Request, urlopen
 from urllib.parse import quote_plus
 
 DOWNLOAD_CHUNK_SIZE = 1 * 1024 * 1024
-DOWNLOAD_CHUNK_TIMEOUT = 100
-DOWNLOAD_CHUNK_RETRY = 5
 
 description = f"""
 
@@ -55,12 +53,16 @@ This allows a patch to be validated before and/or after in-place patching.
 
 
 class PatchToolSettings:
+    http_params = ["base", "tool", "user", "pass", "comp", "timeout", "tries"]
+
     def __init__(self):
         self.split = ["uasset", "umap"]
         self.zip = "bz2"
         self.stop_on_error = False
-        self.http = {attr: None for attr in ["base", "tool", "user", "pass", "comp"]}
+        self.http = {attr: None for attr in self.http_params}
         self.http["type"] = "sha1"
+        self.http["timeout"] = "100"
+        self.http["tries"] = "5"
         self.verbose = False
         self.validation_dirs = "sdp"
 
@@ -363,7 +365,7 @@ class PatchTool(PatchToolSettings):
 
         # parse http parameters (if available), giving command-line override(s) precedence
         http = self.manifest["metadata"].get("http", {})
-        for param in ["base", "tool", "user", "pass", "comp"]:
+        for param in PatchToolSettings.http_params:
             value = self.http.get(param, None)
             value = value if value is not None else http.get(param, None)
             self.http[param] = value
@@ -601,18 +603,16 @@ class XDelta3:
                 self.has_error = True
 
             # fallback to direct download if patch failed
-            if self.has_error and self.http.get("base", None) is not None:
-                self.has_error = False
-                self.download(patch)
-            # try again with clean download if patch still failed
-            if self.has_error and self.http.get("base", None) is not None:
-                self.has_error = False
-                self.download(patch, resume=False)
+            self.tries = int(self.http.get("tries"))
+            if self.has_error and self.tries > 0 and self.http.get("base", None) is not None:
+                tmp_filename = f"{patch.dst_filename}.part"
+                while self.has_error and self.tries > 0:
+                    self.download(patch, tmp_filename)
+                    self.tries -= 1
 
         return self
 
-    def download(self, patch, resume=True):
-        tmp_filename = f"{patch.dst_filename}.part"
+    def download(self, patch, tmp_filename):
         url = self.http["base"] + quote_plus(os.path.relpath(patch.dst_filename, patch.dst))
         if self.http["comp"] != "none":
             url += f".{self.http['comp']}"
@@ -626,6 +626,8 @@ class XDelta3:
                 environ["HTTP_USER"] = self.http["user"] if self.http["user"] else ""
                 environ["HTTP_PASS"] = self.http["pass"] if self.http["pass"] else ""
                 environ["HTTP_COMP"] = self.http["comp"] if self.http["comp"] else ""
+                environ["HTTP_TIMEOUT"] = self.http["timeout"] if self.http["timeout"] else ""
+                environ["HTTP_TRIES"] = self.http["tries"] if self.http["tries"] else ""
                 process = execute_pipe(self.http["tool"], env=environ, shell=True)
                 process.wait()
                 self.trace(process.stdout.read().decode("utf-8").strip())
@@ -633,8 +635,12 @@ class XDelta3:
             # download to temporary file while hashing its contents
             else:
                 data = bytearray()
-                with open(tmp_filename, "ab+" if resume else "wb") as tmpfile:
+                with open(tmp_filename, "ab+") as tmpfile:
                     size = tmpfile.tell()
+                    if size >= patch.dst_size:
+                        tmpfile.truncate()
+                        tmpfile.seek(0)
+                        size = 0
                     if size > 0:
                         tmpfile.seek(0)
                         data = tmpfile.read()
@@ -647,9 +653,9 @@ class XDelta3:
                     # handle HTTPS
                     if url.lower().startswith("https"):
                         context = ssl.create_default_context()
-                        response = urlopen(request, context=context, timeout=DOWNLOAD_CHUNK_TIMEOUT)
+                        response = urlopen(request, context=context, timeout=int(self.http["timeout"]))
                     else:
-                        response = urlopen(request, timeout=DOWNLOAD_CHUNK_TIMEOUT)
+                        response = urlopen(request, timeout=int(self.http["timeout"]))
                     while True:
                         chunk = response.read(DOWNLOAD_CHUNK_SIZE)
                         if not chunk:
@@ -660,6 +666,7 @@ class XDelta3:
                     os.fsync(tmpfile.fileno())
             self.atomic_replace_pipe(patch.dst_filename, data, unzip=self.http["comp"], sha1=patch.dst_sha1)
             remove(tmp_filename)
+            self.has_error = False
         except:
             print(f"ERROR: Failed to direct download: {sys.exc_info()[1]}")
             self.has_error = True
@@ -781,11 +788,13 @@ if __name__ == "__main__":
     arg_parser.add_argument("-x", "--split", dest="split", default=settings.split, nargs="*", help="zero or more split file extensions")
     arg_parser.add_argument("-c", "--zip", dest="zip", choices=["bz2", "gz", "none"], default=settings.zip, help="patch file zip")
     arg_parser.add_argument("-e", "--stop-on-error", dest="stop_on_error", action="store_true", help="stop patching files immediately after the first error")
-    arg_parser.add_argument("-hb", "--http_base", dest="http_base", default=settings.http['base'], required=False, help="http base url")
-    arg_parser.add_argument("-ht", "--http_tool", dest="http_tool", default=settings.http['tool'], required=False, help="http download tool")
-    arg_parser.add_argument("-hu", "--http_user", dest="http_user", default=settings.http['user'], required=False, help="http login user (basic auth)")
-    arg_parser.add_argument("-hp", "--http_pass", dest="http_pass", default=settings.http['pass'], required=False, help="http login pass (basic auth)")
-    arg_parser.add_argument("-hc", "--http_comp", dest="http_comp", default=settings.http['comp'], choices=["bz2", "gz", "none", None], help="http compression")
+    arg_parser.add_argument("-hb", "--http_base", dest="http_base", default=settings.http["base"], required=False, help="http base url")
+    arg_parser.add_argument("-ht", "--http_tool", dest="http_tool", default=settings.http["tool"], required=False, help="http download tool")
+    arg_parser.add_argument("-hu", "--http_user", dest="http_user", default=settings.http["user"], required=False, help="http login user (basic auth)")
+    arg_parser.add_argument("-hp", "--http_pass", dest="http_pass", default=settings.http["pass"], required=False, help="http login pass (basic auth)")
+    arg_parser.add_argument("-hc", "--http_comp", dest="http_comp", default=settings.http["comp"], choices=["bz2", "gz", "none", None], help="http compression")
+    arg_parser.add_argument("-ho", "--http_timeout", dest="http_timeout", default=settings.http["timeout"], required=False, help="http timeout (seconds)")
+    arg_parser.add_argument("-hr", "--http_tries", dest="http_tries", default=settings.http["tries"], required=False, help="http tries count")
     arg_parser.add_argument(
         "-vdirs",
         "--validation_dirs",
