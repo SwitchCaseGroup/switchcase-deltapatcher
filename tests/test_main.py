@@ -7,6 +7,7 @@ import signal
 import shutil
 import pytest
 import base64
+import time
 import json
 import stat
 import sys
@@ -23,8 +24,6 @@ from itertools import product
 
 
 class AuthHTTPRequestHandler(RangeRequestHandler):
-    """ Main class to present webpages and authentication. """
-
     def __init__(self, *args, **kwargs):
         self._auth = base64.b64encode(f"test:pass".encode()).decode()
         super().__init__(*args, **kwargs)
@@ -37,15 +36,14 @@ class AuthHTTPRequestHandler(RangeRequestHandler):
     def do_AUTHHEAD(self):
         self.send_response(401)
         self.send_header("WWW-Authenticate", 'Basic realm="Test"')
-        self.send_header("Content-type", "text/html")
+        self.send_header("Content-type", "application/octet-stream")
         self.end_headers()
 
     def do_GET(self):
-        """ Present frontpage with user authentication. """
         if self.headers.get("Authorization") == None:
             self.do_AUTHHEAD()
             self.wfile.write(b"no auth header received")
-        elif self.headers.get("Authorization") == "Basic " + self._auth:
+        elif self.headers.get("Authorization") == ("Basic " + self._auth):
             RangeRequestHandler.do_GET(self)
         else:
             self.do_AUTHHEAD()
@@ -96,7 +94,6 @@ class PatchToolTests(PatchTool):
         self.cleanup()
 
     def __del__(self):
-        # remove test data
         self.cleanup()
         super().__del__()
 
@@ -401,8 +398,8 @@ def test_validate_failure(patch_tool_tests, dir, type):
     patch_tool_tests.initialize("src-fail", "dst-fail", "pch-fail")
 
 
-@pytest.mark.parametrize("http_tool, http_type, type", product(["wget", None], ["modify", "shrink"], ["modify", "remove"]))
-def test_http_fallback(patch_tool_tests, http_tool, http_type, type):
+@pytest.mark.parametrize("http_tool, http_type, file_type", product(["wget", None], ["modify", "shrink"], ["modify", "remove"]))
+def test_http_fallback(patch_tool_tests, http_tool, http_type, file_type):
     # generate corrupted version of destination file to provide corrupted downloads
     shutil.rmtree("corrupt", ignore_errors=True)
     shutil.rmtree("valid", ignore_errors=True)
@@ -416,7 +413,7 @@ def test_http_fallback(patch_tool_tests, http_tool, http_type, type):
     # corrupt http files
     corrupt_files([os.path.relpath(x, "corrupt") for x in Path("corrupt").glob("*") if x.is_file()], "corrupt", http_type, None)
     # corrupt directories
-    corrupt_dirs(patch_tool_tests, "src-http", "dst-http", "pch-http", "src-http", type)
+    corrupt_dirs(patch_tool_tests, "src-http", "dst-http", "pch-http", "src-http", file_type)
     # run http server with corrupted files first, then again with uncorrupted files
     for http_dir in ["corrupt", "valid"]:
         # compress http files
