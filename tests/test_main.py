@@ -112,6 +112,11 @@ class PatchToolTests(PatchTool):
         self.sequence_number = 0
         self.http_server = None
         self.cleanup()
+        # prepare directories
+        self.initialize("src", "dst", "pch")
+        self.prepare()
+        self.initialize("src", "dst", "pch")
+        self.generate()
 
     def __del__(self):
         self.cleanup()
@@ -260,16 +265,6 @@ def patch_tool_tests(request):
     patch_tool_tests = PatchToolTests(request.param)
     yield patch_tool_tests
     del patch_tool_tests
-
-
-def test_prepare(patch_tool_tests):
-    patch_tool_tests.initialize("src", "dst", "pch")
-    patch_tool_tests.prepare()
-
-
-def test_generate(patch_tool_tests):
-    patch_tool_tests.initialize("src", "dst", "pch")
-    patch_tool_tests.generate()
 
 
 def test_analyze(patch_tool_tests):
