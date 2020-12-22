@@ -94,6 +94,7 @@ class PatchToolTests(PatchTool):
         settings = PatchToolSettings()
         settings.zip = zip
         settings.stop_on_error = True
+        settings.verbose = True
         settings.http["base"] = "http://localhost:8080/"
         settings.http["user"] = "test"
         settings.http["pass"] = "pass"
