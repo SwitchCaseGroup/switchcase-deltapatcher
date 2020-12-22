@@ -26,9 +26,10 @@ from urllib.request import Request, urlopen
 from urllib.parse import quote_plus
 
 DOWNLOAD_CHUNK_SIZE = 1 * 1024 * 1024
-DOWNLOAD_CHUNK_TIMEOUT = 60
+DOWNLOAD_CHUNK_TIMEOUT = 100
+DOWNLOAD_CHUNK_RETRY = 5
 
-description = f'''
+description = f"""
 
 Example to generate patch directory, apply it and then validate:
   python3 patchtool.py generate -s src_dir -d dst_dir -p patch_dir
@@ -50,13 +51,13 @@ Validation can be done on either one or both of src/dst directories:
 
 This allows a patch to be validated before and/or after in-place patching.
 
-'''
+"""
 
 
 class PatchToolSettings:
     def __init__(self):
-        self.split = ['uasset', 'umap']
-        self.zip = 'bz2'
+        self.split = ["uasset", "umap"]
+        self.zip = "bz2"
         self.stop_on_error = False
         self.http_base = None
         self.http_tool = None
@@ -64,7 +65,7 @@ class PatchToolSettings:
         self.http_pass = None
         self.http_comp = None
         self.verbose = False
-        self.validation_dirs = 'sdp'
+        self.validation_dirs = "sdp"
 
 
 class PatchTool(PatchToolSettings):
@@ -93,8 +94,8 @@ class PatchTool(PatchToolSettings):
         self.has_error = False
         self.create_pool()
         # initialize directories
-        self.trace(f'Preparing file information...')
-        for dir in ['src', 'dst', 'pch']:
+        self.trace(f"Preparing file information...")
+        for dir in ["src", "dst", "pch"]:
             directory = getattr(self, dir)
             if directory:
                 # convert dirs to absolute paths
@@ -105,7 +106,7 @@ class PatchTool(PatchToolSettings):
                 self.scan_files(dir, directory)
 
     def scan_files(self, dir, directory):
-        setattr(self, f'{dir}_files', {entry.name: entry for entry in self.scantree(directory, directory)})
+        setattr(self, f"{dir}_files", {entry.name: entry for entry in self.scantree(directory, directory)})
 
     def create_pool(self):
         # flush the old pool which could have lingering subprocesses
@@ -119,19 +120,17 @@ class PatchTool(PatchToolSettings):
 
     def generate(self):
         # cleanup the patch directory
-        self.trace(f'Cleaning {self.pch}...')
+        self.trace(f"Cleaning {self.pch}...")
         shutil.rmtree(self.pch, ignore_errors=True)
         makedirs(self.pch)
 
         # populate src/dst manifest with files/dirs metadata
-        for dir in ['src', 'dst']:
-            for entry in getattr(self, f'{dir}_files').values():
-                self.manifest[dir][entry.name] = {
-                    attr: getattr(entry, attr) for attr in ['uid', 'gid', 'mode', 'size', 'mtime']
-                }
+        for dir in ["src", "dst"]:
+            for entry in getattr(self, f"{dir}_files").values():
+                self.manifest[dir][entry.name] = {attr: getattr(entry, attr) for attr in ["uid", "gid", "mode", "size", "mtime"]}
 
         # create patch directory structure
-        for entry in self.iterate_dirs('dst'):
+        for entry in self.iterate_dirs("dst"):
             makedirs(os.path.join(self.pch, entry.name))
 
         # perform patch generation in parallel and process the results as they arrive
@@ -139,75 +138,74 @@ class PatchTool(PatchToolSettings):
             # update manifest with src hash, if the patch(es) had a source
             if xdelta3.src_filename:
                 src_filename = os.path.relpath(xdelta3.src_filename, self.src)
-                self.manifest['src'][src_filename]['sha1'] = xdelta3.src_sha1
-                self.manifest['src'][src_filename]["xdelta3"] = {}
+                self.manifest["src"][src_filename]["sha1"] = xdelta3.src_sha1
+                self.manifest["src"][src_filename]["xdelta3"] = {}
             # process each patch's results
             for patch in xdelta3.patches:
                 # update manifest with dst hash
                 dst_filename = os.path.relpath(patch.dst_filename, self.dst)
-                self.manifest['dst'][dst_filename]['sha1'] = patch.dst_sha1
+                self.manifest["dst"][dst_filename]["sha1"] = patch.dst_sha1
                 # process patch file result if there was one
                 if patch.pch_sha1:
                     # update manifest with patch hash
                     pch_filename = os.path.relpath(patch.pch_filename, self.pch)
-                    self.manifest['pch'][pch_filename] = {'sha1': patch.pch_sha1, 'zip': self.zip}
+                    self.manifest["pch"][pch_filename] = {"sha1": patch.pch_sha1, "zip": self.zip}
                     # if this patch is a delta, update src in manifest with the delta's filename
                     if xdelta3.src_filename:
-                        self.manifest['src'][src_filename]['xdelta3'][dst_filename] = pch_filename
+                        self.manifest["src"][src_filename]["xdelta3"][dst_filename] = pch_filename
                     # otherwise, reference the destination filename
                     else:
-                        self.manifest['pch'][pch_filename]['dst'] = dst_filename
+                        self.manifest["pch"][pch_filename]["dst"] = dst_filename
             # cleanup empty manifest entries
-            if xdelta3.src_filename and len(self.manifest['src'][src_filename]['xdelta3']) == 0:
-                del self.manifest['src'][src_filename]['xdelta3']
+            if xdelta3.src_filename and len(self.manifest["src"][src_filename]["xdelta3"]) == 0:
+                del self.manifest["src"][src_filename]["xdelta3"]
 
         # generate metadata for manifest file
         self.generate_metadata()
 
         # ch46001: use source file if delta patch is larger than source file
-        for (_, src_entry) in self.iterate_manifest('src'):
-            if 'xdelta3' in src_entry:
+        for (_, src_entry) in self.iterate_manifest("src"):
+            if "xdelta3" in src_entry:
                 # iterate through the delta patches
-                for dst_filename, pch_filename in src_entry['xdelta3'].copy().items():
+                for dst_filename, pch_filename in src_entry["xdelta3"].copy().items():
                     # if this delta patch is larger than its source file, replace it
-                    if self.manifest['pch'][pch_filename]['size'] >= src_entry['size']:
-                        self.trace(f'Replacing delta with direct patch for {os.path.join(self.dst, dst_filename)}')
+                    if self.manifest["pch"][pch_filename]["size"] >= src_entry["size"]:
+                        self.trace(f"Replacing delta with direct patch for {os.path.join(self.dst, dst_filename)}")
                         # revert the delta patch in the manifest and on disk
-                        del self.manifest['pch'][pch_filename]
-                        del src_entry['xdelta3'][dst_filename]
+                        del self.manifest["pch"][pch_filename]
+                        del src_entry["xdelta3"][dst_filename]
                         remove(os.path.join(self.pch, pch_filename))
                         # copy the source file directly into patch directory
                         shutil.copyfile(os.path.join(self.dst, dst_filename), os.path.join(self.pch, dst_filename))
                         # update manifest with the newsource patch
-                        self.manifest['pch'][dst_filename] = {
-                            'sha1': self.manifest['dst'][dst_filename]['sha1'],
-                            'size': self.manifest['dst'][dst_filename]['size'],
-                            'zip': 'none',
-                            'dst': dst_filename
+                        self.manifest["pch"][dst_filename] = {
+                            "sha1": self.manifest["dst"][dst_filename]["sha1"],
+                            "size": self.manifest["dst"][dst_filename]["size"],
+                            "zip": "none",
+                            "dst": dst_filename,
                         }
                 # tidy up if all xdelta3 entries were replaced
-                if len(src_entry['xdelta3']) == 0:
-                    del src_entry['xdelta3']
-                    del src_entry['sha1']
+                if len(src_entry["xdelta3"]) == 0:
+                    del src_entry["xdelta3"]
+                    del src_entry["sha1"]
 
         # write the manifest file
-        self.trace(f'Writing manifest...')
-        with open(os.path.join(self.pch, 'manifest.json'), 'w') as outfile:
+        self.trace(f"Writing manifest...")
+        with open(os.path.join(self.pch, "manifest.json"), "w") as outfile:
             json.dump(self.manifest, outfile, indent=4)
 
     def generate_queue(self):
         # search for modified files and queue patches for them
-        self.trace(f'Creating deltas for modified files...')
+        self.trace(f"Creating deltas for modified files...")
         for (src, dsts) in self.generate_merged():
             # create deltas relative to this source file
-            xdelta3 = XDelta3(self.http_base, self.http_tool, self.http_user,
-                              self.http_pass, self.http_comp, self.verbose, src.path)
+            xdelta3 = XDelta3(self.http_base, self.http_tool, self.http_user, self.http_pass, self.http_comp, self.verbose, src.path)
             xdelta3.src_size = src.size
             # iterate through our destination files, looking for matches
             for dst in dsts:
-                self.trace(f'Matched destination {dst.name}')
+                self.trace(f"Matched destination {dst.name}")
                 # mark this dst as having been queued for processing
-                self.manifest['dst'][dst.name]['sha1'] = ''
+                self.manifest["dst"][dst.name]["sha1"] = ""
                 # generate xdelta3 if the files don't already match
                 abs_dst_filename = os.path.join(self.dst, dst.name)
                 abs_pch_filename = os.path.join(self.pch, dst.name)
@@ -215,27 +213,26 @@ class PatchTool(PatchToolSettings):
             yield xdelta3
 
         # search for destination files without a source and create full-copy patches for them
-        self.trace(f'Copying added files...')
-        for dst in [dst for dst in self.iterate_files('dst') if 'sha1' not in self.manifest['dst'][dst.name]]:
+        self.trace(f"Copying added files...")
+        for dst in [dst for dst in self.iterate_files("dst") if "sha1" not in self.manifest["dst"][dst.name]]:
             pch_filename = os.path.join(self.pch, dst.name)
-            xdelta3 = XDelta3(self.http_base, self.http_tool, self.http_user,
-                              self.http_pass, self.http_comp, self.verbose, None)
+            xdelta3 = XDelta3(self.http_base, self.http_tool, self.http_user, self.http_pass, self.http_comp, self.verbose, None)
             xdelta3.add_patch(XDelta3Patch(self.dst, dst.path, pch_filename, self.zip))
             yield xdelta3
 
     def generate_merged(self):
         map = defaultdict(list)
         # prepare list of destination files for each "prefix" (filename prior to final '.' character)
-        for dst_entry in self.iterate_files('dst'):
-            extension = dst_entry.name.rfind('.')
+        for dst_entry in self.iterate_files("dst"):
+            extension = dst_entry.name.rfind(".")
             if extension != -1:
                 map[dst_entry.name[:extension]].append(dst_entry)
                 continue
             map[dst_entry.name].append(dst_entry)
         # use the prefix lists from above to return source files mapped to their split destination file(s)
-        for src_entry in self.iterate_files('src'):
-            extension = src_entry.name.rfind('.')
-            if extension != -1 and src_entry.name[extension + 1:] in self.split:
+        for src_entry in self.iterate_files("src"):
+            extension = src_entry.name.rfind(".")
+            if extension != -1 and src_entry.name[extension + 1 :] in self.split:
                 dsts = map[src_entry.name[:extension]]
                 if len(dsts):
                     yield (src_entry, dsts)
@@ -246,39 +243,33 @@ class PatchTool(PatchToolSettings):
     def generate_metadata(self):
         # write manifest metadata
         self.manifest["metadata"] = {
-            "manifest": {
-                "created": str(datetime.now()),
-                "version": 1.0,
-                "src": self.src,
-                "dst": self.dst,
-                "pch": self.pch
-            },
+            "manifest": {"created": str(datetime.now()), "version": 1.0, "src": self.src, "dst": self.dst, "pch": self.pch},
             "src_size": 0,
             "dst_size": 0,
-            "pch_size": 0
+            "pch_size": 0,
         }
 
         # refresh pch file information
-        self.scan_files('pch', self.pch)
+        self.scan_files("pch", self.pch)
 
         # update pch manifest entries with file sizes
-        for pch_entry in self.iterate_files('pch'):
-            self.manifest['pch'][pch_entry.name]['size'] = pch_entry.size
+        for pch_entry in self.iterate_files("pch"):
+            self.manifest["pch"][pch_entry.name]["size"] = pch_entry.size
 
         # determine src/dst size
-        for dir in ['src', 'dst', 'pch']:
+        for dir in ["src", "dst", "pch"]:
             for entry in self.iterate_files(dir):
-                self.manifest["metadata"][f'{dir}_size'] += entry.size
+                self.manifest["metadata"][f"{dir}_size"] += entry.size
 
         # save http base, if specified
         if self.http_base is not None:
-            self.manifest['metadata']['http'] = {
-                'base': self.http_base,
-                'tool': self.http_tool,
-                'user': self.http_user,
-                'pass': self.http_pass,
-                'comp': self.http_comp,
-                'type': 'sha1'
+            self.manifest["metadata"]["http"] = {
+                "base": self.http_base,
+                "tool": self.http_tool,
+                "user": self.http_user,
+                "pass": self.http_pass,
+                "comp": self.http_comp,
+                "type": "sha1",
             }
 
     def apply(self):
@@ -286,8 +277,8 @@ class PatchTool(PatchToolSettings):
         self.read_manifest()
 
         # create destination directories, in tree order, applying manifest permissions
-        for (name, entry) in sorted(self.iterate_manifest('dst', True), key=lambda tuple: tuple[0]):
-            mkdir(os.path.join(self.dst, name), mode=entry['mode'])
+        for (name, entry) in sorted(self.iterate_manifest("dst", True), key=lambda tuple: tuple[0]):
+            mkdir(os.path.join(self.dst, name), mode=entry["mode"])
 
         # perform patching in parallel (dependent files)
         for xdelta3 in self.pool.imap_unordered(XDelta3.apply_patches, self.apply_queue(False)):
@@ -302,105 +293,104 @@ class PatchTool(PatchToolSettings):
                 raise ValueError("Failed to apply")
 
         # remove any files not in the manifest
-        for entry in [entry for entry in self.iterate_files('dst') if entry.name not in self.manifest['dst']]:
-            self.trace(f'Removing {entry.name}...')
+        for entry in [entry for entry in self.iterate_files("dst") if entry.name not in self.manifest["dst"]]:
+            self.trace(f"Removing {entry.name}...")
             remove(os.path.join(self.dst, entry.name))
 
         # remove any directories not in the manifest
-        for entry in [entry for entry in self.iterate_dirs('dst') if entry.name not in self.manifest['dst']]:
-            self.trace(f'Removing {entry.name}...')
+        for entry in [entry for entry in self.iterate_dirs("dst") if entry.name not in self.manifest["dst"]]:
+            self.trace(f"Removing {entry.name}...")
             shutil.rmtree(os.path.join(self.dst, entry.name), ignore_errors=True)
 
         # apply file properties
-        self.trace(f'Applying file properties...')
-        for (name, entry) in self.manifest['dst'].items():
+        self.trace(f"Applying file properties...")
+        for (name, entry) in self.manifest["dst"].items():
             dst_filename = os.path.join(self.dst, name)
-            if 'mode' in entry:
-                os.chmod(dst_filename, entry['mode'])
-            if 'uid' in entry and 'gid' in entry:
-                os.chown(dst_filename, entry['uid'], entry['gid'])
-            if 'mtime' in entry:
-                os.utime(dst_filename, times=(entry['mtime'], entry['mtime']))
+            if "mode" in entry:
+                os.chmod(dst_filename, entry["mode"])
+            if "uid" in entry and "gid" in entry:
+                os.chown(dst_filename, entry["uid"], entry["gid"])
+            if "mtime" in entry:
+                os.utime(dst_filename, times=(entry["mtime"], entry["mtime"]))
 
     def apply_queue(self, sources):
         # search for files which need to be copied or patched from source dir
         self.trace(f'Patching files ({"sources" if sources else "dependents"})...')
-        for (src_filename, src_entry) in self.iterate_manifest('src'):
-            xdelta3 = XDelta3(self.http_base, self.http_tool, self.http_user, self.http_pass, self.http_comp,
-                              self.verbose, os.path.join(self.src, src_filename))
-            xdelta3.src_sha1 = src_entry['sha1']
-            xdelta3.src_size = src_entry['size']
+        for (src_filename, src_entry) in self.iterate_manifest("src"):
+            xdelta3 = XDelta3(
+                self.http_base, self.http_tool, self.http_user, self.http_pass, self.http_comp, self.verbose, os.path.join(self.src, src_filename)
+            )
+            xdelta3.src_sha1 = src_entry["sha1"]
+            xdelta3.src_size = src_entry["size"]
             # queue up patches for destination files which are deltas from a source file
-            for dst_filename, pch_filename in src_entry.get('xdelta3', {}).items():
+            for dst_filename, pch_filename in src_entry.get("xdelta3", {}).items():
                 abs_dst_filename = os.path.join(self.dst, dst_filename)
                 # defer patching when destination == source, for in-place patching it would break other deltas
                 if sources == (src_filename == dst_filename):
                     abs_pch_filename = os.path.join(self.pch, pch_filename)
-                    patch = XDelta3Patch(self.dst, abs_dst_filename, abs_pch_filename,
-                                         self.manifest['pch'][pch_filename]['zip'])
-                    patch.dst_sha1 = self.manifest['dst'][dst_filename]['sha1']
-                    patch.dst_size = self.manifest['dst'][dst_filename]['size']
-                    patch.pch_sha1 = self.manifest['pch'][pch_filename]['sha1']
+                    patch = XDelta3Patch(self.dst, abs_dst_filename, abs_pch_filename, self.manifest["pch"][pch_filename]["zip"])
+                    patch.dst_sha1 = self.manifest["dst"][dst_filename]["sha1"]
+                    patch.dst_size = self.manifest["dst"][dst_filename]["size"]
+                    patch.pch_sha1 = self.manifest["pch"][pch_filename]["sha1"]
                     xdelta3.add_patch(patch)
             # queue up patches for destination files to be directly copied from source directory
-            if sources and src_filename in self.manifest['dst']:
-                if src_entry['sha1'] == self.manifest['dst'][src_filename]['sha1']:
+            if sources and src_filename in self.manifest["dst"]:
+                if src_entry["sha1"] == self.manifest["dst"][src_filename]["sha1"]:
                     abs_dst_filename = os.path.join(self.dst, src_filename)
                     patch = XDelta3Patch(self.dst, abs_dst_filename, None, False)
-                    patch.dst_sha1 = src_entry['sha1']
-                    patch.dst_size = src_entry['size']
+                    patch.dst_sha1 = src_entry["sha1"]
+                    patch.dst_size = src_entry["size"]
                     xdelta3.add_patch(patch)
             yield xdelta3
 
         # queue up patches for destination files to be directly copied from patch directory
-        for (pch_filename, pch_entry) in self.iterate_manifest('pch'):
-            if 'dst' in pch_entry:
-                abs_dst_filename = os.path.join(self.dst, pch_entry['dst'])
+        for (pch_filename, pch_entry) in self.iterate_manifest("pch"):
+            if "dst" in pch_entry:
+                abs_dst_filename = os.path.join(self.dst, pch_entry["dst"])
                 abs_pch_filename = os.path.join(self.pch, pch_filename)
-                xdelta3 = XDelta3(self.http_base, self.http_tool, self.http_user,
-                                  self.http_pass, self.http_comp, self.verbose, abs_pch_filename)
-                xdelta3.src_sha1 = self.manifest['pch'][pch_filename]['sha1']
-                patch = XDelta3Patch(self.dst, abs_dst_filename, None, self.manifest['pch'][pch_filename]['zip'])
-                patch.dst_sha1 = self.manifest['dst'][pch_entry['dst']]['sha1']
-                patch.dst_size = self.manifest['dst'][pch_entry['dst']]['size']
+                xdelta3 = XDelta3(self.http_base, self.http_tool, self.http_user, self.http_pass, self.http_comp, self.verbose, abs_pch_filename)
+                xdelta3.src_sha1 = self.manifest["pch"][pch_filename]["sha1"]
+                patch = XDelta3Patch(self.dst, abs_dst_filename, None, self.manifest["pch"][pch_filename]["zip"])
+                patch.dst_sha1 = self.manifest["dst"][pch_entry["dst"]]["sha1"]
+                patch.dst_size = self.manifest["dst"][pch_entry["dst"]]["size"]
                 xdelta3.add_patch(patch)
                 yield xdelta3
 
     def read_manifest(self):
-        self.trace(f'Reading manifest...')
-        with open(os.path.join(self.pch, 'manifest.json'), 'r') as inpfile:
+        self.trace(f"Reading manifest...")
+        with open(os.path.join(self.pch, "manifest.json"), "r") as inpfile:
             self.manifest = json.load(inpfile)
 
         # check manifest version
-        if self.manifest['metadata']['manifest']['version'] > 1.0:
+        if self.manifest["metadata"]["manifest"]["version"] > 1.0:
             self.error(f'Manifest version {self.manifest["metadata"]["manifest"]["version"]} > 1.0!')
 
         # parse http parameters (if available)
-        http = self.manifest['metadata'].get('http', {})
+        http = self.manifest["metadata"].get("http", {})
         for param in ["base", "tool", "user", "pass", "comp"]:
-            value = getattr(self, f'http_{param}')
+            value = getattr(self, f"http_{param}")
             value = value if value is not None else http.get(param, None)
-            setattr(self, f'http_{param}', value)
-            self.trace(f'http_{param}: {value}')
-        self.http_comp = self.http_comp if self.http_comp else 'none'
+            setattr(self, f"http_{param}", value)
+            self.trace(f"http_{param}: {value}")
+        self.http_comp = self.http_comp if self.http_comp else "none"
 
     def iterate_manifest(self, dir, dirs=False):
         for (name, entry) in self.manifest[dir].items():
-            if ('sha1' not in entry) == dirs:
+            if ("sha1" not in entry) == dirs:
                 yield (name, entry)
 
     def iterate_files(self, dir):
-        for entry in getattr(self, f'{dir}_files').values():
+        for entry in getattr(self, f"{dir}_files").values():
             if entry.is_file:
                 yield entry
 
     def iterate_dirs(self, dir):
-        for entry in getattr(self, f'{dir}_files').values():
+        for entry in getattr(self, f"{dir}_files").values():
             if entry.is_dir:
                 yield entry
 
     def iterate_all(self, dir):
-        for entry in getattr(self, f'{dir}_files').values():
+        for entry in getattr(self, f"{dir}_files").values():
             yield entry
 
     def scantree(self, basedir, path):
@@ -420,41 +410,39 @@ class PatchTool(PatchToolSettings):
         # retrieve results in the same order as queued
         for dir in dirs:
             for entry in self.iterate_files(dir):
-                manifest[dir][entry.name] = {
-                    'sha1': tasks.pop(0)
-                }
+                manifest[dir][entry.name] = {"sha1": tasks.pop(0)}
 
     def validate(self):
         # read the manifest file
         self.read_manifest()
 
         # generate local hashes
-        self.trace(f'Generating hashes...')
+        self.trace(f"Generating hashes...")
         local_manifest = defaultdict(dict)
-        self.generate_hashes(local_manifest, ['src', 'dst', 'pch'])
+        self.generate_hashes(local_manifest, ["src", "dst", "pch"])
 
-        dir_lookup = {'s': 'src', 'd': 'dst', 'p': 'pch'}
+        dir_lookup = {"s": "src", "d": "dst", "p": "pch"}
         dirs = [dir_lookup[c] for c in self.validation_dirs if c in dir_lookup]
 
         # validate manifest vs local files
         for dir in [dir for dir in dirs if getattr(self, dir)]:
             # check each entry in the manifest against each local file
             for (filename, entry) in self.iterate_manifest(dir):
-                dir_files = getattr(self, f'{dir}_files')
+                dir_files = getattr(self, f"{dir}_files")
                 abs_filename = os.path.join(getattr(self, dir), filename)
                 # make sure file in manifest exists locally
                 if filename not in dir_files:
-                    self.error(f'{abs_filename}: missing in {dir}')
+                    self.error(f"{abs_filename}: missing in {dir}")
                 # make sure hash in manifest matches the local hash
-                if local_manifest[dir][filename]['sha1'] != self.manifest[dir][filename]['sha1']:
-                    self.error(f'{abs_filename}: manifest sha1 mismatch in {dir}')
+                if local_manifest[dir][filename]["sha1"] != self.manifest[dir][filename]["sha1"]:
+                    self.error(f"{abs_filename}: manifest sha1 mismatch in {dir}")
                 # make sure each file attribute in the manifest matches the local file attribute
-                for attr in [attr for attr in ['uid', 'gid', 'mode', 'size', 'mtime'] if attr in entry]:
+                for attr in [attr for attr in ["uid", "gid", "mode", "size", "mtime"] if attr in entry]:
                     if getattr(dir_files[filename], attr) != entry[attr]:
-                        self.error(f'{abs_filename}: {attr} mismatch in {dir}')
-            for entry in (self.iterate_files(dir) if dir == 'pch' else self.iterate_all(dir)):
-                if entry.name != 'manifest.json' and entry.name not in self.manifest[dir]:
-                    self.error(f'{entry.path}: missing from manifest!')
+                        self.error(f"{abs_filename}: {attr} mismatch in {dir}")
+            for entry in self.iterate_files(dir) if dir == "pch" else self.iterate_all(dir):
+                if entry.name != "manifest.json" and entry.name not in self.manifest[dir]:
+                    self.error(f"{entry.path}: missing from manifest!")
 
     def analyze(self):
         # read the manifest file
@@ -462,49 +450,47 @@ class PatchTool(PatchToolSettings):
 
         # populate src/dst manifest with files/dirs metadata
         local_manifest = defaultdict(dict)
-        self.trace(f'Collecting local file metadata...')
-        for dir in ['src', 'dst']:
-            for entry in getattr(self, f'{dir}_files').values():
-                local_manifest[dir][entry.name] = {
-                    attr: getattr(entry, attr) for attr in ['uid', 'gid', 'mode', 'size', 'mtime']
-                }
+        self.trace(f"Collecting local file metadata...")
+        for dir in ["src", "dst"]:
+            for entry in getattr(self, f"{dir}_files").values():
+                local_manifest[dir][entry.name] = {attr: getattr(entry, attr) for attr in ["uid", "gid", "mode", "size", "mtime"]}
 
         # determine what savings there could be with case-insensitive src/dst keying
-        self.trace(f'Searching for case insensitive src/dst matches...')
+        self.trace(f"Searching for case insensitive src/dst matches...")
         case_insensitive_size = 0
-        upper = {src_entry.upper(): src_entry for src_entry in local_manifest['src']}
-        for dst_entry in local_manifest['dst']:
-            if dst_entry.upper() in upper and dst_entry not in local_manifest['src']:
+        upper = {src_entry.upper(): src_entry for src_entry in local_manifest["src"]}
+        for dst_entry in local_manifest["dst"]:
+            if dst_entry.upper() in upper and dst_entry not in local_manifest["src"]:
                 file_size = local_manifest["dst"][dst_entry]["size"]
-                self.trace(f'{dst_entry} => {upper[dst_entry.upper()]}: {file_size:,} bytes')
+                self.trace(f"{dst_entry} => {upper[dst_entry.upper()]}: {file_size:,} bytes")
                 case_insensitive_size += file_size
 
         # determine what savings there could be with filename matching
-        self.trace(f'Searching for potentially moved files...')
-        src_filenames = {os.path.basename(entry.path): entry for entry in self.iterate_files('dst')}
-        dst_filenames = {os.path.basename(entry.path): entry for entry in self.iterate_files('src')}
+        self.trace(f"Searching for potentially moved files...")
+        src_filenames = {os.path.basename(entry.path): entry for entry in self.iterate_files("dst")}
+        dst_filenames = {os.path.basename(entry.path): entry for entry in self.iterate_files("src")}
         moved_file_size = 0
         for (src_filename, src_entry) in src_filenames.items():
             if src_filename in dst_filenames:
                 dst_entry = dst_filenames[src_filename]
                 if src_entry.name != dst_entry.name:
-                    self.trace(f'{src_entry.name} => {dst_entry.name}: {dst_entry.size:,} bytes')
+                    self.trace(f"{src_entry.name} => {dst_entry.name}: {dst_entry.size:,} bytes")
                     moved_file_size += src_entry.size
 
         # determine what savings there would be detecting patch sizes larger than source size
-        self.trace(f'Searching for large patches...')
+        self.trace(f"Searching for large patches...")
         large_patch_size = 0
-        for (src_filename, src_entry) in self.iterate_manifest('src'):
-            for dst_filename, pch_filename in src_entry.get('xdelta3', {}).items():
-                dst_size = self.manifest['dst'][dst_filename]['size']
-                pch_size = self.manifest['pch'][pch_filename]['size']
+        for (src_filename, src_entry) in self.iterate_manifest("src"):
+            for dst_filename, pch_filename in src_entry.get("xdelta3", {}).items():
+                dst_size = self.manifest["dst"][dst_filename]["size"]
+                pch_size = self.manifest["pch"][pch_filename]["size"]
                 if pch_size > dst_size:
-                    self.trace(f'pch_size: {pch_size} > dst_size: {dst_size}')
-                    large_patch_size += (pch_size - dst_size)
+                    self.trace(f"pch_size: {pch_size} > dst_size: {dst_size}")
+                    large_patch_size += pch_size - dst_size
 
-        print(f'Case insensitive savings could be at most {case_insensitive_size:,} bytes')
-        print(f'Moved file savings could be at most {moved_file_size:,} bytes')
-        print(f'Large patch savings would be {large_patch_size:,} bytes')
+        print(f"Case insensitive savings could be at most {case_insensitive_size:,} bytes")
+        print(f"Moved file savings could be at most {moved_file_size:,} bytes")
+        print(f"Large patch savings would be {large_patch_size:,} bytes")
 
     def trace(self, str):
         trace(self.verbose, str)
@@ -567,29 +553,26 @@ class XDelta3:
             patch.dst_sha1 = perform_hash(self.verbose, patch.dst_filename)
             # if there is no source, copy the destination file directly
             if not self.src_filename:
-                self.trace(f'Copying direct patch for {patch.dst_filename}...')
+                self.trace(f"Copying direct patch for {patch.dst_filename}...")
                 self.update_pch_filename(patch, delta=False)
                 with open(patch.dst_filename, "rb") as inpfile:
                     patch.pch_sha1 = self.atomic_replace_pipe(patch.pch_filename, inpfile.read(), zip=patch.zip)
             # otherwise, if the destination hash don't already match, create a patch
             elif self.src_sha1 != patch.dst_sha1:
-                self.trace(f'Creating delta for {patch.dst_filename}...')
+                self.trace(f"Creating delta for {patch.dst_filename}...")
                 self.update_pch_filename(patch, delta=True)
-                command = [
-                    "xdelta3", "-e", "-0", "-B", str(max(self.src_size, 1 * 1024 * 1024)), "-f", "-c",
-                    "-s", self.src_filename, patch.dst_filename
-                ]
-                self.trace(' '.join(command))
+                command = ["xdelta3", "-e", "-0", "-B", str(max(self.src_size, 1 * 1024 * 1024)), "-f", "-c", "-s", self.src_filename, patch.dst_filename]
+                self.trace(" ".join(command))
                 process = execute_pipe(command)
                 patch.pch_sha1 = self.atomic_replace_pipe(patch.pch_filename, process.stdout.read(), zip=patch.zip)
         return self
 
     def update_pch_filename(self, patch, delta):
         # determine whether or not to apply zip
-        if patch.zip != "none" and patch.pch_filename.endswith(f'.{patch.zip}'):
+        if patch.zip != "none" and patch.pch_filename.endswith(f".{patch.zip}"):
             patch.zip = None
-        patch.pch_filename = f'{patch.pch_filename}.xdelta3' if delta else patch.pch_filename
-        patch.pch_filename = f'{patch.pch_filename}.{patch.zip}' if patch.zip != 'none' else patch.pch_filename
+        patch.pch_filename = f"{patch.pch_filename}.xdelta3" if delta else patch.pch_filename
+        patch.pch_filename = f"{patch.pch_filename}.{patch.zip}" if patch.zip != "none" else patch.pch_filename
 
     def apply_patches(self):
         # lazily hash source only once and only if/when necessary
@@ -601,28 +584,28 @@ class XDelta3:
                 # check if dst already matches the manifest
                 dst_hash = perform_hash(self.verbose, patch.dst_filename)
                 if patch.dst_sha1 == dst_hash:
-                    self.trace(f'Skipping already matching {patch.dst_filename}')
+                    self.trace(f"Skipping already matching {patch.dst_filename}")
                     continue
                 # validate source hash matches the manifest
                 if not src_hash:
                     src_hash = perform_hash(self.verbose, self.src_filename)
                 if self.src_sha1 != src_hash:
-                    self.error(f'Hash mismatch for {self.src_filename}')
+                    self.error(f"Hash mismatch for {self.src_filename}")
                 # validate patch hash matches the manifest
                 if patch.pch_filename:
                     pch_hash = perform_hash(self.verbose, patch.pch_filename)
                     if patch.pch_sha1 != pch_hash:
-                        self.error(f'Hash mismatch for {patch.pch_filename}')
+                        self.error(f"Hash mismatch for {patch.pch_filename}")
                     # patch the source file into the destination
-                    self.trace(f'Patching {patch.pch_filename}...')
+                    self.trace(f"Patching {patch.pch_filename}...")
                     self.apply_xdelta3(patch)
                 # copy patch file directly to destination
                 else:
-                    self.trace(f'Copying {self.src_filename}...')
+                    self.trace(f"Copying {self.src_filename}...")
                     with open(self.src_filename, "rb") as inpfile:
                         self.atomic_replace_pipe(patch.dst_filename, inpfile.read(), unzip=patch.zip)
             except:
-                print(f'ERROR: Failed to apply patch: {sys.exc_info()[1]}')
+                print(f"ERROR: Failed to apply patch: {sys.exc_info()[1]}")
                 self.has_error = True
 
             # fallback to direct download if patch failed
@@ -637,40 +620,40 @@ class XDelta3:
         return self
 
     def download(self, patch, resume=True):
-        tmp_filename = f'{patch.dst_filename}.part'
+        tmp_filename = f"{patch.dst_filename}.part"
         url = self.http_base + quote_plus(os.path.relpath(patch.dst_filename, patch.dst))
-        if self.http_comp != 'none':
-            url += f'.{self.http_comp}'
-        self.trace(f'Downloading {url} to {patch.dst_filename}')
+        if self.http_comp != "none":
+            url += f".{self.http_comp}"
+        self.trace(f"Downloading {url} to {patch.dst_filename}")
         try:
             # optionally, use an external command to download the file
             if self.http_tool:
                 environ = os.environ.copy()
-                environ['HTTP_URL'] = url
-                environ['HTTP_FILE'] = tmp_filename
-                environ['HTTP_USER'] = self.http_user if self.http_user else ''
-                environ['HTTP_PASS'] = self.http_pass if self.http_pass else ''
-                environ['HTTP_COMP'] = self.http_comp if self.http_comp else ''
+                environ["HTTP_URL"] = url
+                environ["HTTP_FILE"] = tmp_filename
+                environ["HTTP_USER"] = self.http_user if self.http_user else ""
+                environ["HTTP_PASS"] = self.http_pass if self.http_pass else ""
+                environ["HTTP_COMP"] = self.http_comp if self.http_comp else ""
                 process = execute_pipe(self.http_tool, env=environ, shell=True)
                 process.wait()
-                self.trace(process.stdout.read().decode('utf-8').strip())
-                data = open(tmp_filename, 'rb').read()
+                self.trace(process.stdout.read().decode("utf-8").strip())
+                data = open(tmp_filename, "rb").read()
             # download to temporary file while hashing its contents
             else:
                 data = bytearray()
-                with open(tmp_filename, 'ab+' if resume else 'wb') as tmpfile:
+                with open(tmp_filename, "ab+" if resume else "wb") as tmpfile:
                     size = tmpfile.tell()
                     if size > 0:
                         tmpfile.seek(0)
                         data = tmpfile.read()
                     request = Request(url)
-                    request.add_header('Range', f'bytes={size}-')
+                    request.add_header("Range", f"bytes={size}-")
                     # handle HTTP authentication
                     if self.http_user is not None:
-                        base64string = base64.b64encode(f'{self.http_user}:{self.http_pass}'.encode('utf-8'))
-                        request.add_header('Authorization', f'Basic {base64string.decode("utf-8")}')
+                        base64string = base64.b64encode(f"{self.http_user}:{self.http_pass}".encode("utf-8"))
+                        request.add_header("Authorization", f'Basic {base64string.decode("utf-8")}')
                     # handle HTTPS
-                    if url.lower().startswith('https'):
+                    if url.lower().startswith("https"):
                         context = ssl.create_default_context()
                         response = urlopen(request, context=context, timeout=DOWNLOAD_CHUNK_TIMEOUT)
                     else:
@@ -686,15 +669,12 @@ class XDelta3:
             self.atomic_replace_pipe(patch.dst_filename, data, unzip=self.http_comp, sha1=patch.dst_sha1)
             remove(tmp_filename)
         except:
-            print(f'ERROR: Failed to direct download: {sys.exc_info()[1]}')
+            print(f"ERROR: Failed to direct download: {sys.exc_info()[1]}")
             self.has_error = True
 
     def apply_xdelta3(self, patch):
-        command = [
-            "xdelta3", "-d", "-B", str(max(self.src_size, 1 * 1024 * 1024)), "-f", "-c",
-            "-s", self.src_filename
-        ]
-        self.trace(' '.join(command))
+        command = ["xdelta3", "-d", "-B", str(max(self.src_size, 1 * 1024 * 1024)), "-f", "-c", "-s", self.src_filename]
+        self.trace(" ".join(command))
         process = execute_pipe(command)
         if patch.zip == "bz2":
             inpfile = bz2.open(patch.pch_filename, "rb")
@@ -707,10 +687,10 @@ class XDelta3:
         self.atomic_replace_pipe(patch.dst_filename, data, sha1=patch.dst_sha1)
 
     def atomic_replace_pipe(self, dst, data, zip=None, unzip=None, sha1=None):
-        tmp = f'{dst}.tmp'
+        tmp = f"{dst}.tmp"
         # copy pipe to temporary file while hashing its contents
         hash = hashlib.sha1()
-        with open(tmp, 'wb') as outfile:
+        with open(tmp, "wb") as outfile:
             data = bz2.compress(data) if zip == "bz2" else data
             data = gzip.compress(data) if zip == "gz" else data
             data = bz2.decompress(data) if unzip == "bz2" else data
@@ -723,7 +703,7 @@ class XDelta3:
         # validate the digest
         digest = hash.hexdigest()
         if sha1 and sha1 != digest:
-            self.error(f'Hash mismatch for {dst}!')
+            self.error(f"Hash mismatch for {dst}!")
         # perform atomic replace of temporary file
         self.replace(tmp, dst)
         return digest
@@ -773,16 +753,16 @@ def execute_pipe(command, env=None, shell=False):
     try:
         return subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, env=env, shell=shell)
     except subprocess.CalledProcessError as e:
-        print(f'{command}')
-        print(f'{e.stdout}')
+        print(f"{command}")
+        print(f"{e.stdout}")
         raise
 
 
 def perform_hash(verbose, filename):
-    trace(verbose, f'Hashing {filename}...')
+    trace(verbose, f"Hashing {filename}...")
     hash = hashlib.sha1()
     try:
-        with open(filename, 'rb') as inpfile:
+        with open(filename, "rb") as inpfile:
             block = inpfile.read(io.DEFAULT_BUFFER_SIZE)
             while len(block) != 0:
                 hash.update(block)
@@ -801,36 +781,27 @@ if __name__ == "__main__":
     settings = PatchToolSettings()
 
     # parse command-line arguments and execute the command
-    arg_parser = argparse.ArgumentParser(
-        description=description, formatter_class=argparse.RawTextHelpFormatter)
+    arg_parser = argparse.ArgumentParser(description=description, formatter_class=argparse.RawTextHelpFormatter)
+    arg_parser.add_argument("command", nargs="?", choices=commands, default="generate", help="command")
+    arg_parser.add_argument("-s", "--src", dest="src", required=False, help="source directory")
+    arg_parser.add_argument("-d", "--dst", dest="dst", required=False, help="destination directory")
+    arg_parser.add_argument("-p", "--patch", dest="pch", required=True, help="patch directory")
+    arg_parser.add_argument("-x", "--split", dest="split", default=settings.split, nargs="*", help="zero or more split file extensions")
+    arg_parser.add_argument("-c", "--zip", dest="zip", choices=["bz2", "gz", "none"], default=settings.zip, help="patch file zip")
+    arg_parser.add_argument("-e", "--stop-on-error", dest="stop_on_error", action="store_true", help="stop patching files immediately after the first error")
+    arg_parser.add_argument("-hb", "--http_base", dest="http_base", default=settings.http_base, required=False, help="http base url")
+    arg_parser.add_argument("-ht", "--http_tool", dest="http_tool", default=settings.http_tool, required=False, help="http download tool")
+    arg_parser.add_argument("-hu", "--http_user", dest="http_user", default=settings.http_user, required=False, help="http login user (basic auth)")
+    arg_parser.add_argument("-hp", "--http_pass", dest="http_pass", default=settings.http_pass, required=False, help="http login pass (basic auth)")
+    arg_parser.add_argument("-hc", "--http_comp", dest="http_comp", default=settings.http_comp, choices=["bz2", "gz", "none", None], help="http compression")
     arg_parser.add_argument(
-        'command', nargs='?', choices=commands, default="generate", help='command')
-    arg_parser.add_argument('-s', '--src', dest='src',
-                            required=False, help='source directory')
-    arg_parser.add_argument('-d', '--dst', dest='dst',
-                            required=False, help='destination directory')
-    arg_parser.add_argument('-p', '--patch', dest='pch',
-                            required=True, help='patch directory')
-    arg_parser.add_argument('-x', '--split', dest='split', default=settings.split,
-                            nargs="*", help='zero or more split file extensions')
-    arg_parser.add_argument('-c', '--zip', dest='zip',
-                            choices=["bz2", "gz", "none"], default=settings.zip, help='patch file zip')
-    arg_parser.add_argument('-e', '--stop-on-error', dest='stop_on_error',
-                            action="store_true", help='stop patching files immediately after the first error')
-    arg_parser.add_argument('-hb', '--http_base', dest='http_base',
-                            default=settings.http_base, required=False, help='http base url')
-    arg_parser.add_argument('-ht', '--http_tool', dest='http_tool',
-                            default=settings.http_tool, required=False, help='http download tool')
-    arg_parser.add_argument('-hu', '--http_user', dest='http_user',
-                            default=settings.http_user, required=False, help='http login user (basic auth)')
-    arg_parser.add_argument('-hp', '--http_pass', dest='http_pass',
-                            default=settings.http_pass, required=False, help='http login pass (basic auth)')
-    arg_parser.add_argument('-hc', '--http_comp', dest='http_comp',
-                            default=settings.http_comp, choices=["bz2", "gz", "none", None], help='http compression')
-    arg_parser.add_argument('-vdirs', '--validation_dirs', dest='validation_dirs', default=settings.validation_dirs,
-                            help='directories to validate against manifest (s: src, d: dst, p: pch) e.g. -vdirs sdp')
-    arg_parser.add_argument('-v', '--verbose', dest='verbose',
-                            action="store_true", help='increase verbosity')
+        "-vdirs",
+        "--validation_dirs",
+        dest="validation_dirs",
+        default=settings.validation_dirs,
+        help="directories to validate against manifest (s: src, d: dst, p: pch) e.g. -vdirs sdp",
+    )
+    arg_parser.add_argument("-v", "--verbose", dest="verbose", action="store_true", help="increase verbosity")
     args = arg_parser.parse_args()
 
     try:
@@ -838,7 +809,7 @@ if __name__ == "__main__":
             settings.__dict__[attr] = value
         patch_tool = PatchTool(settings)
         patch_tool.initialize(args.src, args.dst, args.pch)
-        getattr(globals()['PatchTool'], args.command)(patch_tool)
+        getattr(globals()["PatchTool"], args.command)(patch_tool)
         sys.exit(1 if patch_tool.has_error else 0)
     except KeyboardInterrupt:
         sys.exit(1)
