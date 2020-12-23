@@ -69,10 +69,7 @@ class PatchToolSettings:
     def parse(self, args):
         self.http = {type: "sha1"}
         for attr, value in settings.__dict__.items():
-            if attr.startswith("http"):
-                self.http[attr] = value
-            else:
-                self.__dict__[attr] = value
+            self.__dict__[attr] = value
 
 
 class PatchTool(PatchToolSettings):
