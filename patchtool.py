@@ -67,7 +67,6 @@ class PatchToolSettings:
         self.validation_dirs = "sdp"
 
     def parse(self, args):
-        self.http = {type: "sha1"}
         for attr, value in settings.__dict__.items():
             self.__dict__[attr] = value
 
