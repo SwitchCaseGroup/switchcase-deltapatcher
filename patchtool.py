@@ -664,7 +664,7 @@ class XDelta3:
             remove(tmp_filename)
             patch.has_error = False
         except:
-            print(f"ERROR: Failed to direct download: {sys.exc_info()[1]}")
+            print(f"ERROR: Failed to direct download {url}: {sys.exc_info()[1]}")
             patch.has_error = True
 
     def apply_xdelta3(self, patch):
