@@ -1,0 +1,48 @@
+@startuml generate-sequence
+
+skinparam interface {
+  backgroundColor white
+  borderColor orange
+}
+
+skinparam component {
+  FontSize 13
+  FontName Courier
+  BorderColor black
+  BackgroundColor gold
+  ArrowFontName Impact
+  ArrowColor #FF6655
+  ArrowFontColor #777777
+}
+
+title Binary Delta Patcher Generate Command
+
+' initialize
+PatchTool -> pch : remove all files
+PatchTool <-> src : parse metadata
+PatchTool <-> dst : parse metadata
+PatchTool -> pch : create directory structure
+
+' multiple workers
+collections XDelta3Patch as XDelta3Patch
+
+' generate delta files
+PatchTool -> XDelta3Patch : generate delta files
+XDelta3Patch <-> src : generate src hash
+XDelta3Patch <-> dst : generate dst hash
+XDelta3Patch -> xdelta3 : generate diff
+xdelta3 <-> src : read file
+xdelta3 <-> dst : read file
+xdelta3 -> pch : write file
+XDelta3Patch -> PatchTool : return src/dst/pch hashes
+
+' copy new files
+PatchTool -> XDelta3Patch : copy new files
+XDelta3Patch <-> dst : read file
+XDelta3Patch -> pch : write file
+
+' finalize
+PatchTool -> pch : finalize/optimize
+PatchTool -> pch : write manifest
+
+@enduml

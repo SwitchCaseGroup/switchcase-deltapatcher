@@ -1,0 +1,12 @@
+{
+    "files.exclude": {
+      "**/.git": true,
+      "**/.DS_Store": true,
+    },
+    "plantuml.exportOutDir": "docs",
+    "plantuml.exportFormat": "svg",
+    "plantuml.exportSubFolder": false,
+    "plantuml.diagramsRoot": "docs/src/",
+    "plantuml.includepaths": [],
+    "plantuml.fileExtensions": ".puml,.iuml"
+  }
