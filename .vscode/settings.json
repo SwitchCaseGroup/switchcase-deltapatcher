@@ -8,5 +8,5 @@
     "plantuml.exportSubFolder": false,
     "plantuml.diagramsRoot": "docs/src/",
     "plantuml.includepaths": [],
-    "plantuml.fileExtensions": ".puml,.iuml"
+    "plantuml.fileExtensions": ".puml"
   }

@@ -1,35 +1,14 @@
 @startuml generate-sequence
 
-skinparam interface {
-  backgroundColor white
-  borderColor orange
-}
-
-skinparam component {
-  FontSize 13
-  FontName Courier
-  BorderColor black
-  BackgroundColor gold
-  ArrowFontName Impact
-  ArrowColor #FF6655
-  ArrowFontColor #777777
-}
+!include patchtool.iuml
 
 title Binary Delta Patcher Generate Command
-
-participant PatchTool as PatchTool
-participant "[src]" as src
-participant "[dst]" as dst
-participant "[pch]" as pch
 
 ' initialize
 PatchTool -> pch : remove all files
 PatchTool <-> src : parse metadata
 PatchTool <-> dst : parse metadata
 PatchTool -> pch : create directory structure
-
-' multiple workers
-collections XDelta3Patch as XDelta3Patch
 
 ' generate delta files
 PatchTool -> XDelta3Patch : generate delta files

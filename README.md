@@ -63,10 +63,14 @@ Each of the "--http_*" parameters are written to the manifest file if they are p
 
 Patch directories are applied using the "apply" command. Patches can be applied into a new destination folder, or "in-place" over the top of the source folder. All file operations are atomic so an interrupted apply command can be resumed by running the command again. By default, the patch operation will ignore errors and continue patching any valid files it is able to. The parameter "--stop-on-error" can be used to stop immediately on the first error. Only operations without errors will be committed to disk, so errors will not result in a corrupted destination directory.
 
+![](docs/apply-sequence.svg)
+
 
 ## Validate
 
 The validate command allows validation between src/dst/pch directories. The patch directory parameter is mandatory, but src and dst are optional. If both src and dst directories are provided, validation is a bit more thorough as it will validate the manifest against each src/dst directory as well as comparing the src/dst directories directly.
+
+![](docs/validate-sequence.svg)
 
 
 ## Analyze
