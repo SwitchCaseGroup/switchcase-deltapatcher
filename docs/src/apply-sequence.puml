@@ -4,29 +4,33 @@
 
 title Binary Delta Patcher Apply Command
 
-' initialize
-PatchTool <-> pch : read manifest
-PatchTool -> dst : create directory structure
-
-' apply delta files
-PatchTool -> XDelta3Patch : apply delta files
-XDelta3Patch <-> dst : validate dst hash
-XDelta3Patch <-> src : validate src hash
-XDelta3Patch <-> pch : validate pch hash
-group if hash validation failure
-  XDelta3Patch <-> HTTP : download dst file(s)
+group initialize
+  PatchTool -> pch : read manifest
+  PatchTool -> dst : create directory structure
 end
-group if hash validation success
-  XDelta3Patch -> xdelta3 : apply diff
-  xdelta3 <-> src : read file
-  xdelta3 <-> pch : read file
-  xdelta3 <-> dst : read file
-  xdelta3 <-> dst : write file
-end
-XDelta3Patch -> PatchTool : return src/dst/pch hashes
 
-' removed files
-PatchTool -> dst : remove obsolete files/dirs
-PatchTool -> dst : apply file properties
+group apply
+  PatchTool -> XDelta3Patch : apply delta files
+  activate XDelta3Patch
+    XDelta3Patch -> dst : validate dst hash
+    XDelta3Patch -> src : validate src hash
+    XDelta3Patch -> pch : validate pch hash
+    group if hash validation success
+      XDelta3Patch -> xdelta3 : apply diff
+      xdelta3 -> src : read file
+      xdelta3 -> pch : read file
+      xdelta3 -> dst : read file
+      xdelta3 -> dst : write file
+    end
+    group else (hash validation failure)
+      XDelta3Patch -> HTTP : download dst file(s)
+    end
+  return return src/dst/pch hashes
+end
+
+group finalize
+  PatchTool -> dst : remove obsolete files/dirs
+  PatchTool -> dst : apply file properties
+end
 
 @enduml

@@ -1,24 +1,20 @@
-skinparam interface {
-  backgroundColor white
-  borderColor orange
-}
+!include https://raw.githubusercontent.com/bschwarz/puml-themes/master/themes/cerulean/puml-theme-cerulean.puml
 
-skinparam component {
-  FontSize 13
-  FontName Courier
-  BorderColor black
-  BackgroundColor gold
-  ArrowFontName Impact
-  ArrowColor #FF6655
-  ArrowFontColor #777777
-}
+box "patchtool.py"
+  participant PatchTool as PatchTool
+  collections XDelta3Patch as XDelta3Patch
+end box
 
-participant PatchTool as PatchTool
-participant "[src]" as src
-participant "[dst]" as dst
-participant "[pch]" as pch
+box "Filesystem"
+  participant "[src]" as src
+  participant "[dst]" as dst
+  participant "[pch]" as pch
+end box
 
-collections XDelta3Patch as XDelta3Patch
+box "Linux CLI"
+  participant "xdelta3" as xdelta3
+end box
 
-participant "xdelta3" as xdelta3
-participant "HTTP" as HTTP
+box "External Server"
+  participant "HTTP Server" as HTTP
+end box
