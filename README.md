@@ -1,7 +1,7 @@
 # [interactivefitness-deltapatcher](README.md) <!-- omit in toc -->
 
 
-This is delta patching software which extends [Xdelta](http://xdelta.org/) to patch directories instead of just individual files. Source and destination directories are analyzed to determine differences, and a patch directory representing their differences in generated. This patch folder can then be used to reconstruct the destination directory from the original source directory.
+This is delta patching software which extends [Xdelta](http://xdelta.org/) to patch directories instead of just individual files. Source and destination directories are analyzed to determine differences, and a patch directory representing their differences is generated. This patch folder can then be used to reconstruct the destination directory from the original source directory.
 
 ```
 | Tool         | Source    | Destination | Patch         |
