@@ -17,6 +17,11 @@ skinparam component {
 
 title Binary Delta Patcher Generate Command
 
+participant PatchTool as PatchTool
+participant "[src]" as src
+participant "[dst]" as dst
+participant "[pch]" as pch
+
 ' initialize
 PatchTool -> pch : remove all files
 PatchTool <-> src : parse metadata
