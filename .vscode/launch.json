@@ -17,7 +17,7 @@
                 "tests/test-dst",
                 "-p",
                 "/tmp/test-pch",
-                "-b",
+                "-hb",
                 "http://localhost:8080/"
             ],
             "console": "integratedTerminal"
