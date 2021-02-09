@@ -82,7 +82,6 @@ class PatchTool(PatchToolSettings):
         # initialize other members
         self.manifest = defaultdict(dict)
         self.pool = None
-        self.create_pool()
 
     def __del__(self):
         self.pool.terminate()
@@ -116,6 +115,7 @@ class PatchTool(PatchToolSettings):
     def create_pool(self):
         # flush the old pool which could have lingering subprocesses
         if self.pool:
+            self.pool.terminate()
             self.pool.close()
             self.pool.join()
         # create pool, disabling SIGINT so parent process can handle it
