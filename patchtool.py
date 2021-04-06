@@ -597,7 +597,7 @@ class XDelta3:
                 else:
                     self.trace(f"Copying {self.src_filename}...")
                     with open(self.src_filename, "rb") as inpfile:
-                        self.atomic_replace_pipe(patch.dst_filename, inpfile.read(), unzip=patch.zip)
+                        self.atomic_replace_pipe(patch.dst_filename, inpfile.read(), unzip=patch.zip, sha1=patch.dst_sha1)
             except:
                 print(f"ERROR: Failed to apply patch: {sys.exc_info()[1]}")
                 patch.has_error = True
