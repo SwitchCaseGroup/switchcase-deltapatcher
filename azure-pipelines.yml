@@ -11,7 +11,7 @@ resources:
     type: github
     endpoint: switchcase-build
     name: SwitchCaseGroup/switchcase-azure-pipelines-templates
-    ref: refs/tags/v3.3.0
+    ref: arobinson/ch76283/go-patcher-ensure-hash-check-for-copied-files
 
 trigger:
 - master
@@ -19,3 +19,10 @@ trigger:
 
 jobs:
 - template: jobs/build_python.yml@templates
+  parameters:
+    preBuild:
+      - bash: |
+          sudo apt-get -yq update
+          sudo apt-get install -y xdelta3
+        env:
+          DEBIAN_FRONTEND: "noninteractive"
