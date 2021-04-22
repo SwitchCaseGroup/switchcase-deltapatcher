@@ -1,0 +1,26 @@
+@startuml validate-sequence
+
+!include patchtool.iuml
+
+title Binary Delta Patcher Validate Command
+
+group initialize
+  PatchTool -> pch : read manifest
+end
+
+group validate
+  group if src validation enabled
+    PatchTool -> src : validate src hash
+    PatchTool -> src : validate src file properties
+  end
+  group if dst validation enabled
+    PatchTool -> dst : validate dst hash
+    PatchTool -> dst : validate dst file properties
+  end
+  group if pch validation enabled
+    PatchTool -> pch : validate pch hash
+    PatchTool -> pch : validate pch file properties
+  end
+end
+
+@enduml

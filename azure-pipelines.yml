@@ -28,7 +28,14 @@ pr:
   drafts: true
 
 jobs:
-  - template: jobs/build_python.yml@templates
-  - template: jobs/build_deb.yml@templates
-    parameters:
-      artifactName: "expresso-deltapatcher"
+- template: jobs/build_python.yml@templates
+  parameters:
+    preBuild:
+      - bash: |
+          sudo apt-get -yq update
+          sudo apt-get install -y xdelta3
+        env:
+          DEBIAN_FRONTEND: "noninteractive"
+- template: jobs/build_deb.yml@templates
+  parameters:
+    artifactName: "expresso-deltapatcher"
