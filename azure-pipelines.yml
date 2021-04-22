@@ -11,11 +11,24 @@ resources:
     type: github
     endpoint: switchcase-build
     name: SwitchCaseGroup/switchcase-azure-pipelines-templates
-    ref: refs/tags/v2.2.0
+    ref: refs/tags/v4.3.0
+  - repository: self
+    clean: true
 
 trigger:
-- master
-- prs
+  batch: true
+  branches:
+    include:
+      - master
+  paths:
+    exclude:
+      - README.md
+pr:
+  autoCancel: true
+  drafts: true
 
 jobs:
-- template: jobs/build_python.yml@templates
+  - template: jobs/build_python.yml@templates
+  - template: jobs/build_deb.yml@templates
+    parameters:
+      artifactName: "expresso-deltapatcher"
