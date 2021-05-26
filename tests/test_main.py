@@ -103,8 +103,13 @@ class PatchToolTests(PatchTool):
         super().__init__(settings)
         # repeatability
         random.seed(0)
+        # prepare temp directory (fail if we can't wipe it clean)
+        self.tmpdir = os.path.join(tempfile.gettempdir(), "patchtool-test")
+        if os.path.isdir(self.tmpdir):
+            shutil.rmtree(self.tmpdir)
+        os.makedirs(self.tmpdir)
         # work within temp directory
-        os.chdir(tempfile.gettempdir())
+        os.chdir(self.tmpdir)
         # configure test directories
         self.out = os.path.abspath("out")
         # initialize state
