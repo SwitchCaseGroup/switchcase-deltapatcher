@@ -11,7 +11,7 @@ resources:
     type: github
     endpoint: switchcase-build
     name: SwitchCaseGroup/switchcase-azure-pipelines-templates
-    ref: arobinson/ch85140/interactivefitness-deltapatcher-support-for-20-04
+    ref: refs/tags/v4.7.0
   - repository: self
     clean: true
 
