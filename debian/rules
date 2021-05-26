@@ -24,7 +24,10 @@ override_dh_auto_build:
 	done
 
 override_dh_auto_test:
-	PYTHONPATH=$(CURDIR) dh_auto_test
+	set -ex; for python in $(PY3); do \
+		LANG=C.UTF-8 LC_ALL=C.UTF-8 $$python -m pip install -r requirements.txt; \
+		LANG=C.UTF-8 LC_ALL=C.UTF-8 $$python -m pytest tests -v; \
+	done
 
 override_dh_auto_install:
 	set -ex; for python in $(PY3); do \
