@@ -11,7 +11,7 @@ resources:
     type: github
     endpoint: switchcase-build
     name: SwitchCaseGroup/switchcase-azure-pipelines-templates
-    ref: arobinson/ch76283/go-patcher-ensure-hash-check-for-copied-files
+    ref: refs/tags/v4.7.0
 
 trigger:
 - master
@@ -20,6 +20,17 @@ trigger:
 jobs:
 - template: jobs/build_python.yml@templates
   parameters:
+    pool:
+      vmImage: $(imageName)
+    strategy:
+      matrix:
+        ubuntu1804:
+          imageName: "ubuntu-18.04"
+          artifactPlatform: "1804"
+        ubuntu2004:
+          imageName: "ubuntu-20.04"
+          artifactPlatform: "2004"
+      maxParallel: 2
     preBuild:
       - bash: |
           sudo apt-get -yq update
