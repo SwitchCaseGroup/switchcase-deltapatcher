@@ -11,7 +11,7 @@ resources:
     type: github
     endpoint: switchcase-build
     name: SwitchCaseGroup/switchcase-azure-pipelines-templates
-    ref: arobinson/ch76283/go-patcher-ensure-hash-check-for-copied-files
+    ref: refs/tags/v4.6.0
 
 trigger:
 - master
