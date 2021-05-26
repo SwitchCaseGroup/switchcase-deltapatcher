@@ -103,8 +103,13 @@ class PatchToolTests(PatchTool):
         super().__init__(settings)
         # repeatability
         random.seed(0)
+        # prepare temp directory (fail if we can't wipe it clean)
+        self.tmpdir = os.path.join(tempfile.gettempdir(), "patchtool-test")
+        if os.path.isdir(self.tmpdir):
+            shutil.rmtree(self.tmpdir)
+        os.makedirs(self.tmpdir)
         # work within temp directory
-        os.chdir(tempfile.gettempdir())
+        os.chdir(self.tmpdir)
         # configure test directories
         self.out = os.path.abspath("out")
         # initialize state
@@ -437,7 +442,7 @@ def test_http_fallback(patch_tool_tests, http_tool, http_type, file_type, http_d
         )
         subprocess.check_output(["xargs", "-0", zip2cmd[patch_tool_tests.zip]], stdin=find.stdout)
         find.wait()
-    patch_tool_tests.start_http(http_dir, http_dir != "corrupt")
+    patch_tool_tests.start_http(os.path.abspath(http_dir), http_dir != "corrupt")
     try:
         # exception could leave zombie workers, re-init to flush the pool
         patch_tool_tests.initialize("src-http", "dst-http", "pch-http")

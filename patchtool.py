@@ -613,7 +613,7 @@ class XDelta3:
         return self
 
     def download(self, patch, tmp_filename):
-        url = self.http["base"] + quote_plus(os.path.relpath(patch.dst_filename, patch.dst))
+        url = self.http["base"] + quote_plus(os.path.relpath(patch.dst_filename, patch.dst), safe='/')
         if self.http["comp"] != "none":
             url += f".{self.http['comp']}"
         self.trace(f"Downloading {url} to {patch.dst_filename}")
