@@ -36,10 +36,10 @@ jobs:
       matrix:
         ubuntu1804:
           imageName: "ubuntu-18.04"
-          artifactPlatform: "1804"
+          artifactName: "1804-build_python"
         ubuntu2004:
           imageName: "ubuntu-20.04"
-          artifactPlatform: "2004"
+          artifactName: "2004-build_python"
       maxParallel: 2
     preBuild:
       - bash: |
