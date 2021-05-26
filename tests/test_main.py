@@ -442,7 +442,7 @@ def test_http_fallback(patch_tool_tests, http_tool, http_type, file_type, http_d
         )
         subprocess.check_output(["xargs", "-0", zip2cmd[patch_tool_tests.zip]], stdin=find.stdout)
         find.wait()
-    patch_tool_tests.start_http(http_dir, http_dir != "corrupt")
+    patch_tool_tests.start_http(os.path.abspath(http_dir), http_dir != "corrupt")
     try:
         # exception could leave zombie workers, re-init to flush the pool
         patch_tool_tests.initialize("src-http", "dst-http", "pch-http")
