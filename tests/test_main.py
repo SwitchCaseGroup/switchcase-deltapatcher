@@ -392,6 +392,8 @@ def corrupt_files(files, dir, type, pch):
                     data = inpfile.read()
                 with open(os.path.join(dir, filename), "wb") as outfile:
                     outfile.write(data[0 : -int(len(data) / 2)])
+                    outfile.flush()
+                    os.fsync(outfile.fileno())
             elif type == "permissions":
                 full_path = os.path.join(dir, filename)
                 current = stat.S_IMODE(os.stat(full_path).st_mode)
