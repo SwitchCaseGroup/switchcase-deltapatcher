@@ -167,6 +167,8 @@ class PatchToolTests(PatchTool):
             filename = os.path.join(filename, self.generate_id())
             with open(filename, "wb") as outfile:
                 outfile.write(os.urandom(file_size))
+                outfile.flush()
+                os.fsync(outfile.fileno())
             self.generate_permissions(filename)
             size -= file_size
 
@@ -230,6 +232,8 @@ class PatchToolTests(PatchTool):
         with open(filename, "wb") as outfile:
             for block in blocks:
                 outfile.write(block)
+            outfile.flush()
+            os.fsync(outfile.fileno())
 
     def split_file(self, filename):
         # pull data chunks out of destination file into separate files
@@ -253,6 +257,8 @@ class PatchToolTests(PatchTool):
         for (i, filename) in enumerate(parts):
             with open(filename, "wb") as outfile:
                 outfile.write(blocks[i])
+                outfile.flush()
+                os.fsync(outfile.fileno())
 
     def get_out_dir(self, inplace, resilience):
         return f'out{"_inplace" if inplace else ""}{"_resilience" if resilience else ""}'
@@ -386,6 +392,8 @@ def corrupt_files(files, dir, type, pch):
                     data = inpfile.read()
                 with open(os.path.join(dir, filename), "wb") as outfile:
                     outfile.write(data[0 : -int(len(data) / 2)])
+                    outfile.flush()
+                    os.fsync(outfile.fileno())
             elif type == "permissions":
                 full_path = os.path.join(dir, filename)
                 current = stat.S_IMODE(os.stat(full_path).st_mode)
