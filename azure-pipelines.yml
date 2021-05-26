@@ -30,7 +30,7 @@ jobs:
         ubuntu2004:
           imageName: "ubuntu-20.04"
           artifactPlatform: "2004"
-      maxParallel: 3
+      maxParallel: 2
     preBuild:
       - bash: |
           sudo apt-get -yq update
