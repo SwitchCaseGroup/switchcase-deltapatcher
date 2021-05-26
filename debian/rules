@@ -28,7 +28,6 @@ override_dh_auto_test:
 		LANG=C.UTF-8 LC_ALL=C.UTF-8 $$python -m pip install -r requirements.txt; \
 		LANG=C.UTF-8 LC_ALL=C.UTF-8 $$python -m pytest tests; \
 	done
-	PYTHONPATH=$(CURDIR) dh_auto_test
 
 override_dh_auto_install:
 	set -ex; for python in $(PY3); do \
