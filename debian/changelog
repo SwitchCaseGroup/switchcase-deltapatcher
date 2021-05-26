@@ -1,3 +1,19 @@
+expresso-deltapatcher (0.2.0) ubuntu2004; urgency=medium
+
+  [ caustik ]
+  * sync .flake w/workflow
+  * xdelta3 -0 is much faster for same size result as -9
+  * update performance benchmarks
+  * set source size in xdelta3 to file size
+  * update after latest benchmarks
+  * gzip support
+  * updated benchmarks
+  * support both bzip and gzip
+  * proper file extensions for patch files
+  * apply and validate last modified timestamps
+
+ -- Sander van Zoest <svanzoest@ifholdings.com>  Wed, 26 May 2021 15:56:25 -0700
+
 expresso-deltapatcher (0.1.0) ubuntu1804; urgency=low
 
   * 0f88af4 Using python 3.6 to match bionic
