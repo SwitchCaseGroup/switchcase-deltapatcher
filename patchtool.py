@@ -1,4 +1,4 @@
-#
+#!/usr/bin/python
 # file: patchtool.py
 # desc: Binary delta patching tool
 #

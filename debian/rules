@@ -4,12 +4,16 @@
 
 include /usr/share/dpkg/pkg-info.mk
 
+#export DH_VERBOSE = 1
+export PYBUILD_NAME = deltapatcher
+
+EXPRESSO_BIN := /usr/local/expresso/bin
+
 DH_ARGS=--with=python3 --buildsystem=pybuild
 # Run setup.py with the default python3 last so that the scripts use
 # #!/usr/bin/python3 and not #!/usr/bin/python3.X.
 PY3 := $(filter-out $(PY3DEFAULT),$(PY3REQUESTED)) python3
 
-PYTHON2_VERSIONS = $(shell pyversions -r)
 PYTHON3_VERSIONS = $(shell py3versions -r)
 py3sdo = set -e; $(foreach py, $(PYTHON3_VERSIONS), $(py) $(1);)
 pyalldo = set -e; $(foreach py, $(PYTHON2_VERSIONS) $(PYTHON3_VERSIONS), $(py) $(1);)
@@ -23,19 +27,24 @@ override_dh_auto_build:
 		LANG=C.UTF-8 LC_ALL=C.UTF-8 $$python setup.py build; \
 	done
 
+override_dh_python3:
+	dh_python3 --shebang=/usr/bin/python3
+
+#dh_auto_test -- --test-pytest
 override_dh_auto_test:
 	set -ex; for python in $(PY3); do \
-		LANG=C.UTF-8 LC_ALL=C.UTF-8 $$python -m pip install -r requirements.txt; \
+		LANG=C.UTF-8 LC_ALL=C.UTF-8 $$python -m pip install -e .[dev]; \
 		LANG=C.UTF-8 LC_ALL=C.UTF-8 $$python -m pytest tests -v; \
 	done
 
+override_dh_usrlocal:
+
 override_dh_auto_install:
 	set -ex; for python in $(PY3); do \
-		LANG=C.UTF-8 LC_ALL=C.UTF-8 $$python setup.py install --root=$(CURDIR)/debian/$(DEB_SOURCE) --install-scripts=/usr/local/expresso/bin --install-layout=deb; \
+		LANG=C.UTF-8 LC_ALL=C.UTF-8 $$python setup.py install --root=$(CURDIR)/debian/$(DEB_SOURCE) --install-layout=deb; \
+		mkdir -p  $(CURDIR)/debian/$(DEB_SOURCE)$(EXPRESSO_BIN); \
+		mv $(CURDIR)/debian/$(DEB_SOURCE)/usr/bin/patchtool.py $(CURDIR)/debian/$(DEB_SOURCE)$(EXPRESSO_BIN)/deltapatcher; \
 	done
-
-
-override_dh_usrlocal:
 
 override_dh_auto_clean:
 	dh_auto_clean
