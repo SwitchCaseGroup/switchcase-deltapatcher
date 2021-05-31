@@ -8,5 +8,6 @@ setup(
     include_package_data=True,
     description="Expresso Delta Patcher",
     packages=find_packages(),
+    scripts=['patchtool.py'],
     install_requires=['pytest', 'pytest-cov', 'rangehttpserver']
 )
