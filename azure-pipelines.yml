@@ -1,9 +1,5 @@
 # Python package
-# Create and test a Python package on multiple Python versions.
-# Add steps that analyze code, save the dist with the build record, publish to a PyPI-compatible index, and more:
 # https://docs.microsoft.com/azure/devops/pipelines/languages/python
-
-
 # https://aka.ms/yaml
 resources:
   repositories:
@@ -31,17 +27,7 @@ jobs:
 - template: jobs/build_python.yml@templates
   parameters:
     pool:
-      vmImage: $(imageName)
-    strategy:
-      matrix:
-        ubuntu1804:
-          imageName: "ubuntu-18.04"
-          artifactPlatform: "1804"
-        ubuntu2004:
-          imageName: "ubuntu-20.04"
-          artifactPlatform: "2004"
-      maxParallel: 2
-    artifactName: $(artifactPlatform)-build_python
+      vmImage: "ubuntu-20.04"
     preBuild:
       - bash: |
           sudo apt-get -yq update
