@@ -7,7 +7,7 @@ resources:
     type: github
     endpoint: switchcase-build
     name: SwitchCaseGroup/switchcase-azure-pipelines-templates
-    ref: refs/tags/v4.7.2
+    ref: refs/tags/v4.11.0
   - repository: self
     clean: true
 
