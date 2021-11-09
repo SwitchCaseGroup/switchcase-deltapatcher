@@ -1,5 +1,5 @@
 expresso-deltapatcher: dir-in-usr-local usr/local/expresso/
 expresso-deltapatcher: dir-in-usr-local usr/local/expresso/bin/
-expresso-deltapatcher: file-in-usr-local usr/local/expresso/bin/patchtool
-expresso-deltapatcher: file-in-unusual-dir usr/local/expresso/bin/patchtool
+expresso-deltapatcher: file-in-usr-local usr/local/expresso/bin/deltapatcher
+expresso-deltapatcher: file-in-unusual-dir usr/local/expresso/bin/deltapatcher
 

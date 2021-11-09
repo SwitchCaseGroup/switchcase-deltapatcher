@@ -4,10 +4,10 @@
 This is delta patching software which extends [Xdelta](http://xdelta.org/) to patch directories instead of just individual files. Source and destination directories are analyzed to determine differences, and a patch directory representing their differences is generated. This patch folder can then be used to reconstruct the destination directory from the original source directory. Additionally, an HTTP(s) backup can be configured to recover corrupt files in the event of hash validation failure.
 
 ```
-| Tool         | Source    | Destination | Patch         |
-| ------------ | --------- | ----------- | ------------- |
-| XDelta3      | file1.dat | file2.dat   | patch.xdelta3 |
-| patchtool.py | folder1/  | folder2/    | patch/        |
+| Tool            | Source    | Destination | Patch         |
+| --------------- | --------- | ----------- | ------------- |
+| XDelta3         | file1.dat | file2.dat   | patch.xdelta3 |
+| deltapatcher.py | folder1/  | folder2/    | patch/        |
 ```
 
 - [Setup](#setup)
@@ -37,14 +37,14 @@ apt-get install python3-full xdelta3
 # Commands
 
 ```
-usage: patchtool.py [-h] [-s SRC] [-d DST] -p PCH [-x [SPLIT [SPLIT ...]]]
+usage: deltapatcher.py [-h] [-s SRC] [-d DST] -p PCH [-x [SPLIT [SPLIT ...]]]
                     [-c {bz2,gz,none}] [-v]
                     [{generate,apply,validate,analyze}]
 
 Example to generate patch directory, apply it and then validate:
-  python3 patchtool.py generate -s src_dir -d dst_dir -p patch_dir
-  python3 patchtool.py apply -s src_dir -d out_dir -p patch_dir
-  python3 patchtool.py validate -s src_dir -d out_dir -p patch_dir
+  python3 deltapatcher.py generate -s src_dir -d dst_dir -p patch_dir
+  python3 deltapatcher.py apply -s src_dir -d out_dir -p patch_dir
+  python3 deltapatcher.py validate -s src_dir -d out_dir -p patch_dir
 
 ```
 

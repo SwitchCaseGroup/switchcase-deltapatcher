@@ -1,16 +1,16 @@
 @startuml apply-sequence
 
-!include patchtool.iuml
+!include deltapatcher.iuml
 
 title Binary Delta Patcher Apply Command
 
 group initialize
-  PatchTool -> pch : read manifest
-  PatchTool -> dst : create directory structure
+  DeltaPatcher -> pch : read manifest
+  DeltaPatcher -> dst : create directory structure
 end
 
 group apply
-  PatchTool -> XDelta3Patch : apply delta files
+  DeltaPatcher -> XDelta3Patch : apply delta files
   activate XDelta3Patch
     XDelta3Patch -> dst : validate dst hash
     XDelta3Patch -> src : validate src hash
@@ -29,8 +29,8 @@ group apply
 end
 
 group finalize
-  PatchTool -> dst : remove obsolete files/dirs
-  PatchTool -> dst : apply file properties
+  DeltaPatcher -> dst : remove obsolete files/dirs
+  DeltaPatcher -> dst : apply file properties
 end
 
 @enduml

@@ -1,7 +1,7 @@
 !include https://raw.githubusercontent.com/bschwarz/puml-themes/master/themes/cerulean/puml-theme-cerulean.puml
 
-box "patchtool.py"
-  participant PatchTool as PatchTool
+box "deltapatcher.py"
+  participant DeltaPatcher as DeltaPatcher
   collections XDelta3Patch as XDelta3Patch
 end box
 

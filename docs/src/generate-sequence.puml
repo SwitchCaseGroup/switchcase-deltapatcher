@@ -1,18 +1,18 @@
 @startuml generate-sequence
 
-!include patchtool.iuml
+!include deltapatcher.iuml
 
 title Binary Delta Patcher Generate Command
 
 group initialize
-    PatchTool -> pch : remove all files
-    PatchTool -> src : parse metadata
-    PatchTool -> dst : parse metadata
-    PatchTool -> pch : create directory structure
+    DeltaPatcher -> pch : remove all files
+    DeltaPatcher -> src : parse metadata
+    DeltaPatcher -> dst : parse metadata
+    DeltaPatcher -> pch : create directory structure
 end
 
 group generate
-    PatchTool -> XDelta3Patch : generate delta files
+    DeltaPatcher -> XDelta3Patch : generate delta files
     activate XDelta3Patch
     XDelta3Patch -> src : generate src hash
     XDelta3Patch -> dst : generate dst hash
@@ -21,7 +21,7 @@ group generate
     xdelta3 -> dst : read file
     xdelta3 -> pch : write file
     return return src/dst/pch hashes
-    PatchTool -> XDelta3Patch : copy new files
+    DeltaPatcher -> XDelta3Patch : copy new files
     activate XDelta3Patch
     XDelta3Patch -> dst : read file
     XDelta3Patch -> pch : write file
@@ -29,8 +29,8 @@ group generate
 end
 
 group finalize
-    PatchTool -> pch : finalize/optimize
-    PatchTool -> pch : write manifest
+    DeltaPatcher -> pch : finalize/optimize
+    DeltaPatcher -> pch : write manifest
 end
 
 @enduml
