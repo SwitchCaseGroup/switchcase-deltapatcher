@@ -1,5 +1,5 @@
 #!/usr/bin/python
-# file: patchtool.py
+# file: deltapatcher.py
 # desc: Binary delta patching tool
 #
 
@@ -30,29 +30,29 @@ DOWNLOAD_CHUNK_SIZE = 1 * 1024 * 1024
 description = f"""
 
 Example to generate patch directory, apply it and then validate:
-  python3 patchtool.py generate -s src_dir -d dst_dir -p patch_dir
-  python3 patchtool.py apply -s src_dir -d out_dir -p patch_dir
-  python3 patchtool.py validate -s src_dir -d out_dir -p patch_dir
+  python3 deltapatcher.py generate -s src_dir -d dst_dir -p patch_dir
+  python3 deltapatcher.py apply -s src_dir -d out_dir -p patch_dir
+  python3 deltapatcher.py validate -s src_dir -d out_dir -p patch_dir
 
 Patching can also be done in-place, over top of the source directory:
-  python3 patchtool.py generate -s src_dir -d dst_dir -p patch_dir
-  python3 patchtool.py apply -s src_dir -d src_dir -p patch_dir
-  python3 patchtool.py validate -d src_dir -p patch_dir
+  python3 deltapatcher.py generate -s src_dir -d dst_dir -p patch_dir
+  python3 deltapatcher.py apply -s src_dir -d src_dir -p patch_dir
+  python3 deltapatcher.py validate -d src_dir -p patch_dir
 
 Patch apply uses atomic file operations. If the process is interrupted,
 the apply command can be run again to resume patching.
 
 Validation can be done on either one or both of src/dst directories:
-  python3 patchtool.py validate -s src_dir -d out_dir -p patch_dir
-  python3 patchtool.py validate -s src_dir -p patch_dir
-  python3 patchtool.py validate -d dst_dir -p patch_dir
+  python3 deltapatcher.py validate -s src_dir -d out_dir -p patch_dir
+  python3 deltapatcher.py validate -s src_dir -p patch_dir
+  python3 deltapatcher.py validate -d dst_dir -p patch_dir
 
 This allows a patch to be validated before and/or after in-place patching.
 
 """
 
 
-class PatchToolSettings:
+class DeltaPatcherSettings:
     http_params = ["base", "tool", "user", "pass", "comp", "timeout", "tries"]
 
     def __init__(self):
@@ -73,7 +73,7 @@ class PatchToolSettings:
                 self.http[attr[5:]] = value
 
 
-class PatchTool(PatchToolSettings):
+class DeltaPatcher(DeltaPatcherSettings):
     def __init__(self, settings):
         # apply settings to this instance
         for attr, value in settings.__dict__.items():
@@ -363,7 +363,7 @@ class PatchTool(PatchToolSettings):
 
         # parse http parameters (if available), giving command-line override(s) precedence
         http = self.manifest["metadata"].get("http", {})
-        for param in PatchToolSettings.http_params:
+        for param in DeltaPatcherSettings.http_params:
             value = self.http.get(param, None)
             value = value if value is not None else http.get(param, None)
             self.http[param] = value
@@ -777,7 +777,7 @@ if __name__ == "__main__":
     commands = ["generate", "apply", "validate", "analyze"]
 
     # default settings
-    settings = PatchToolSettings()
+    settings = DeltaPatcherSettings()
 
     # parse command-line arguments and execute the command
     arg_parser = argparse.ArgumentParser(description=description, formatter_class=argparse.RawTextHelpFormatter)
@@ -807,9 +807,9 @@ if __name__ == "__main__":
 
     try:
         settings.parse(args)
-        patch_tool = PatchTool(settings)
+        patch_tool = DeltaPatcher(settings)
         patch_tool.initialize(args.src, args.dst, args.pch)
-        getattr(globals()["PatchTool"], args.command)(patch_tool)
+        getattr(globals()["DeltaPatcher"], args.command)(patch_tool)
         sys.exit(1 if patch_tool.has_error else 0)
     except KeyboardInterrupt:
         sys.exit(1)

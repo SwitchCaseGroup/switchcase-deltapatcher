@@ -19,7 +19,7 @@ from RangeHTTPServer import RangeRequestHandler
 from http.server import HTTPServer
 from pathlib import Path
 
-from patchtool import PatchTool, PatchToolSettings
+from deltapatcher import DeltaPatcher, DeltaPatcherSettings
 from itertools import product
 
 g_timeout_path = None
@@ -74,7 +74,7 @@ def http_server(dir, timeout=False):
     server.serve_forever()
 
 
-class PatchToolTests(PatchTool):
+class DeltaPatcherTests(DeltaPatcher):
     # test configuration
     target_size = 8 * 1024 * 1024
     min_file_size = 1
@@ -90,7 +90,7 @@ class PatchToolTests(PatchTool):
     chance_add = (60, 70)
 
     def __init__(self, zip):
-        settings = PatchToolSettings()
+        settings = DeltaPatcherSettings()
         settings.zip = zip
         settings.stop_on_error = True
         settings.verbose = True
@@ -104,7 +104,7 @@ class PatchToolTests(PatchTool):
         # repeatability
         random.seed(0)
         # prepare temp directory (fail if we can't wipe it clean)
-        self.tmpdir = os.path.join(tempfile.gettempdir(), "patchtool-test")
+        self.tmpdir = os.path.join(tempfile.gettempdir(), "deltapatcher-test")
         if os.path.isdir(self.tmpdir):
             shutil.rmtree(self.tmpdir)
         os.makedirs(self.tmpdir)
@@ -272,7 +272,7 @@ class PatchToolTests(PatchTool):
 
 @pytest.fixture(scope="module", params=["none", "bz2", "gz"])
 def patch_tool_tests(request):
-    patch_tool_tests = PatchToolTests(request.param)
+    patch_tool_tests = DeltaPatcherTests(request.param)
     yield patch_tool_tests
     del patch_tool_tests
 

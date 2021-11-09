@@ -43,7 +43,7 @@ override_dh_auto_install:
 	set -ex; for python in $(PY3); do \
 		LANG=C.UTF-8 LC_ALL=C.UTF-8 $$python setup.py install --root=$(CURDIR)/debian/$(DEB_SOURCE) --install-layout=deb; \
 		mkdir -p  $(CURDIR)/debian/$(DEB_SOURCE)$(EXPRESSO_BIN); \
-		mv $(CURDIR)/debian/$(DEB_SOURCE)/usr/bin/patchtool.py $(CURDIR)/debian/$(DEB_SOURCE)$(EXPRESSO_BIN)/deltapatcher; \
+		mv $(CURDIR)/debian/$(DEB_SOURCE)/usr/bin/deltapatcher.py $(CURDIR)/debian/$(DEB_SOURCE)$(EXPRESSO_BIN)/deltapatcher; \
 	done
 
 override_dh_auto_clean:

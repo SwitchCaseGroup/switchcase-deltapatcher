@@ -5,10 +5,10 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python - Debug patchtool (generate)",
+            "name": "Python - Debug deltapatcher (generate)",
             "type": "python",
             "request": "launch",
-            "program": "patchtool.py",
+            "program": "deltapatcher.py",
             "args": [
                 "generate",
                 "-s",
@@ -23,10 +23,10 @@
             "console": "integratedTerminal"
         },
         {
-            "name": "Python - Debug patchtool (apply)",
+            "name": "Python - Debug deltapatcher (apply)",
             "type": "python",
             "request": "launch",
-            "program": "patchtool.py",
+            "program": "deltapatcher.py",
             "args": [
                 "apply",
                 "-s",
@@ -39,10 +39,10 @@
             "console": "integratedTerminal"
         },
         {
-            "name": "Python - Debug patchtool (validate)",
+            "name": "Python - Debug deltapatcher (validate)",
             "type": "python",
             "request": "launch",
-            "program": "patchtool.py",
+            "program": "deltapatcher.py",
             "args": [
                 "generate",
                 "-s",
