@@ -1,3 +1,11 @@
+expresso-deltapatcher (0.2.1) ubuntu2004; urgency=medium
+
+  [ caustik ]
+  * patchtool => deltapatcher
+  * update version
+
+ -- Sander van Zoest <svanzoest@ifholdings.com>  Tue, 09 Nov 2021 10:20:25 -0800
+
 expresso-deltapatcher (0.2.0) ubuntu2004; urgency=medium
 
   [ caustik ]
