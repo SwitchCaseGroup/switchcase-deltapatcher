@@ -421,7 +421,7 @@ def test_validate_failure(patch_tool_tests, dir, type):
 
 
 @pytest.mark.parametrize(
-    "http_tool, file_type, http_dir", product([None, "wget"], ["modify", "remove"], ["corrupt-modify", "corrupt-shrink", "timeout", "valid"])
+    "http_tool, file_type, http_dir", product([None, "wget"], ["modify", "remove"], ["valid", "corrupt-modify", "corrupt-shrink", "timeout"])
 )
 def test_http_fallback(patch_tool_tests, http_tool, file_type, http_dir):
     # wipe the http directory
