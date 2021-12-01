@@ -421,23 +421,30 @@ def test_validate_failure(patch_tool_tests, dir, type):
 
 
 @pytest.mark.parametrize(
-    "http_tool, http_type, file_type, http_dir", product([None, "wget"], ["modify", "shrink"], ["modify", "remove"], ["corrupt", "timeout", "valid"])
+    "http_tool, file_type, http_dir", product([None, "wget"], ["modify", "remove"], ["corrupt-modify", "corrupt-shrink", "timeout", "valid"])
 )
-def test_http_fallback(patch_tool_tests, http_tool, http_type, file_type, http_dir):
-    http_dst_dir = f"{http_dir}/{patch_tool_tests.http['dst']}"
-    # copy initially destination from pristine dst folder
+def test_http_fallback(patch_tool_tests, http_tool, file_type, http_dir):
+    # wipe the http directory
     shutil.rmtree(http_dir, ignore_errors=True)
+
+    # copy dst folder into HTTP dst folder
+    http_dst_dir = f"{http_dir}/{patch_tool_tests.http['dst']}"
     patch_tool_tests.copytree("dst", http_dst_dir)
-    # wget http tool
+
+    # configure http_tool:wget
     if http_tool == "wget":
         patch_tool_tests.http["tool"] = "wget $HTTP_URL -q -O $HTTP_FILE --user $HTTP_USER --password $HTTP_PASS --timeout $HTTP_TIMEOUT --tries $HTTP_TRIES"
         patch_tool_tests.http["user"] = "test"
         patch_tool_tests.http["pass"] = "pass"
+
     # corrupt http files
-    if http_dir == "corrupt":
+    if "corrupt" in http_dir:
+        http_type = http_dir.split("-")[1]
         corrupt_files([os.path.relpath(x, http_dir) for x in Path(http_dir).glob("**/*") if x.is_file()], http_dir, http_type, None)
+
     # corrupt src/dst/pch directories
     corrupt_dirs(patch_tool_tests, "src-http", "dst-http", "pch-http", "src-http", file_type)
+
     # compress http files
     if patch_tool_tests.zip != "none":
         zip2cmd = {"bz2": "bzip2", "gz": "gzip"}
@@ -446,19 +453,26 @@ def test_http_fallback(patch_tool_tests, http_tool, http_type, file_type, http_d
         )
         subprocess.check_output(["xargs", "-0", zip2cmd[patch_tool_tests.zip]], stdin=find.stdout)
         find.wait()
-    patch_tool_tests.start_http(os.path.abspath(http_dir), http_dir != "corrupt")
+
+    # start HTTP server
+    patch_tool_tests.start_http(os.path.abspath(http_dir), "corrupt" not in http_dir)
+
+    # perform the actual test
     try:
         # exception could leave zombie workers, re-init to flush the pool
         patch_tool_tests.initialize("src-http", "dst-http", "pch-http")
+
         # expect error if http fallback is corrupted
-        if http_dir == "corrupt":
+        if "corrupt" in http_dir:
             with pytest.raises(ValueError):
                 patch_tool_tests.apply()
+        # expect error if http times out
         elif http_dir == "timeout":
             patch_tool_tests.http["timeout"] = "5"
             patch_tool_tests.http["tries"] = "1"
             with pytest.raises(ValueError):
                 patch_tool_tests.apply()
+        # otherwise, expect success
         else:
             patch_tool_tests.http["timeout"] = "5"
             patch_tool_tests.http["tries"] = "5"
