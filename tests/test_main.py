@@ -424,9 +424,10 @@ def test_validate_failure(patch_tool_tests, dir, type):
     "http_tool, http_type, file_type, http_dir", product([None, "wget"], ["modify", "shrink"], ["modify", "remove"], ["corrupt", "timeout", "valid"])
 )
 def test_http_fallback(patch_tool_tests, http_tool, http_type, file_type, http_dir):
+    http_dst_dir = f"{http_dir}/{patch_tool_tests.http['dst']}"
     # copy initially destination from pristine dst folder
     shutil.rmtree(http_dir, ignore_errors=True)
-    patch_tool_tests.copytree("dst", f"{http_dir}/{patch_tool_tests.http['dst']}")
+    patch_tool_tests.copytree("dst", http_dst_dir)
     # wget http tool
     if http_tool == "wget":
         patch_tool_tests.http["tool"] = "wget $HTTP_URL -q -O $HTTP_FILE --user $HTTP_USER --password $HTTP_PASS --timeout $HTTP_TIMEOUT --tries $HTTP_TRIES"
@@ -441,7 +442,7 @@ def test_http_fallback(patch_tool_tests, http_tool, http_type, file_type, http_d
     if patch_tool_tests.zip != "none":
         zip2cmd = {"bz2": "bzip2", "gz": "gzip"}
         find = subprocess.Popen(
-            ["find", os.path.abspath(http_dir), "-not", "-name", f"*.{patch_tool_tests.zip}", "-type", "f", "-print0"], stdout=subprocess.PIPE
+            ["find", os.path.abspath(http_dst_dir), "-not", "-name", f"*.{patch_tool_tests.zip}", "-type", "f", "-print0"], stdout=subprocess.PIPE
         )
         subprocess.check_output(["xargs", "-0", zip2cmd[patch_tool_tests.zip]], stdin=find.stdout)
         find.wait()
