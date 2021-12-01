@@ -1,19 +1,13 @@
 import multiprocessing
 import subprocess
 import tempfile
-import argparse
 import random
-import signal
 import shutil
 import pytest
 import base64
-import time
 import json
 import stat
-import sys
-import re
 import os
-import io
 
 from RangeHTTPServer import RangeRequestHandler
 from http.server import HTTPServer
@@ -100,6 +94,7 @@ class DeltaPatcherTests(DeltaPatcher):
         settings.http["comp"] = zip
         settings.http["timeout"] = "60"
         settings.http["tries"] = "5"
+        settings.http["dst"] = "dst"
         super().__init__(settings)
         # repeatability
         random.seed(0)
@@ -431,7 +426,7 @@ def test_validate_failure(patch_tool_tests, dir, type):
 def test_http_fallback(patch_tool_tests, http_tool, http_type, file_type, http_dir):
     # copy initially destination from pristine dst folder
     shutil.rmtree(http_dir, ignore_errors=True)
-    patch_tool_tests.copytree("dst", http_dir)
+    patch_tool_tests.copytree("dst", f"{http_dir}/{patch_tool_tests.http['dst']}")
     # wget http tool
     if http_tool == "wget":
         patch_tool_tests.http["tool"] = "wget $HTTP_URL -q -O $HTTP_FILE --user $HTTP_USER --password $HTTP_PASS --timeout $HTTP_TIMEOUT --tries $HTTP_TRIES"
@@ -439,7 +434,7 @@ def test_http_fallback(patch_tool_tests, http_tool, http_type, file_type, http_d
         patch_tool_tests.http["pass"] = "pass"
     # corrupt http files
     if http_dir == "corrupt":
-        corrupt_files([os.path.relpath(x, http_dir) for x in Path(http_dir).glob("*") if x.is_file()], http_dir, http_type, None)
+        corrupt_files([os.path.relpath(x, http_dir) for x in Path(http_dir).glob("**/*") if x.is_file()], http_dir, http_type, None)
     # corrupt src/dst/pch directories
     corrupt_dirs(patch_tool_tests, "src-http", "dst-http", "pch-http", "src-http", file_type)
     # compress http files

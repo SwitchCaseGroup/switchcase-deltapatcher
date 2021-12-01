@@ -53,7 +53,7 @@ This allows a patch to be validated before and/or after in-place patching.
 
 
 class DeltaPatcherSettings:
-    http_params = ["base", "tool", "user", "pass", "comp", "timeout", "tries"]
+    http_params = ["base", "dst", "pch", "tool", "user", "pass", "comp", "timeout", "tries"]
 
     def __init__(self):
         self.split = ["uasset", "umap"]
@@ -613,7 +613,8 @@ class XDelta3:
         return self
 
     def download(self, patch, tmp_filename):
-        url = self.http["base"] + quote_plus(os.path.relpath(patch.dst_filename, patch.dst), safe='/')
+        http_dst = self.http.get("dst", None)
+        url = self.http["base"] + (f"{http_dst}/" if http_dst else "") + quote_plus(os.path.relpath(patch.dst_filename, patch.dst), safe="/")
         if self.http["comp"] != "none":
             url += f".{self.http['comp']}"
         self.trace(f"Downloading {url} to {patch.dst_filename}")
@@ -795,6 +796,12 @@ if __name__ == "__main__":
     arg_parser.add_argument("-hc", "--http_comp", dest="http_comp", default=settings.http["comp"], choices=["bz2", "gz", "none", None], help="http compression")
     arg_parser.add_argument("-ho", "--http_timeout", dest="http_timeout", default=settings.http["timeout"], required=False, help="http timeout (seconds)")
     arg_parser.add_argument("-hr", "--http_tries", dest="http_tries", default=settings.http["tries"], required=False, help="http tries count")
+    arg_parser.add_argument(
+        "-hdst", "--http_dst", dest="http_dst", required=False, help="http subdirectory for destination files (root directory if unspecified)"
+    )
+    arg_parser.add_argument(
+        "-hpch", "--http_pch", dest="http_pch", required=False, help="http subdirectory for patch files (no patch files available if unspecified)"
+    )
     arg_parser.add_argument(
         "-vdirs",
         "--validation_dirs",
