@@ -421,9 +421,10 @@ def test_validate_failure(patch_tool_tests, dir, type):
 
 
 @pytest.mark.parametrize(
-    "http_tool, file_type, http_dir", product([None, "wget"], ["modify", "remove"], ["valid", "corrupt-modify", "corrupt-shrink", "corrupt-remove", "timeout"])
+    "http_tool, corrupt_type, http_dir",
+    product([None, "wget"], ["src-modify", "src-remove"], ["valid", "corrupt-modify", "corrupt-shrink", "corrupt-remove", "timeout"]),
 )
-def test_http_fallback(patch_tool_tests, http_tool, file_type, http_dir):
+def test_http_fallback(patch_tool_tests, http_tool, corrupt_type, http_dir):
     # wipe the http directory
     shutil.rmtree(http_dir, ignore_errors=True)
 
@@ -443,7 +444,8 @@ def test_http_fallback(patch_tool_tests, http_tool, file_type, http_dir):
         corrupt_files([os.path.relpath(x, http_dir) for x in Path(http_dir).glob("**/*") if x.is_file()], http_dir, http_type, None)
 
     # corrupt src/dst/pch directories
-    corrupt_dirs(patch_tool_tests, "src-http", "dst-http", "pch-http", "src-http", file_type)
+    (file_type, corrupt_type) = corrupt_type.split("-")
+    corrupt_dirs(patch_tool_tests, "src-http", "dst-http", "pch-http", f"{file_type}-http", corrupt_type)
 
     # compress http files
     if patch_tool_tests.zip != "none":
