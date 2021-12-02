@@ -403,11 +403,16 @@ def corrupt_dirs(patch_tool_tests, src, dst, pch, dir, type):
     shutil.rmtree(dst, ignore_errors=True)
     shutil.rmtree(pch, ignore_errors=True)
     patch_tool_tests.copytree("src", src)
-    if dir != src:  # use empty dst directory when testing corrupted src, otherwise dst files would just be skipped :)
+    if dir == dst:  # use empty dst directory when testing corrupted src, otherwise dst files would just be skipped :)
         patch_tool_tests.copytree("dst", dst)
     patch_tool_tests.copytree("pch", pch)
     patch_tool_tests.initialize(src, dst, pch)
-    corrupt_files([file.name for file in patch_tool_tests.iterate_files("src" if dir == src else "dst")], dir, type, pch)
+    if dir == src:
+        corrupt_files([file.name for file in patch_tool_tests.iterate_files("src")], dir, type, pch)
+    elif dir == pch:
+        corrupt_files([file.name for file in patch_tool_tests.iterate_files("pch") if file.name != "manifest.json"], dir, type, pch)
+    else:
+        corrupt_files([file.name for file in patch_tool_tests.iterate_files("dst")], dir, type, pch)
     patch_tool_tests.initialize(src, dst, pch)
 
 
@@ -422,7 +427,11 @@ def test_validate_failure(patch_tool_tests, dir, type):
 
 @pytest.mark.parametrize(
     "http_tool, corrupt_type, http_dir",
-    product([None, "wget"], ["src-modify", "src-remove"], ["valid", "corrupt-modify", "corrupt-shrink", "corrupt-remove", "timeout"]),
+    product(
+        [None, "wget"],  # download method (internal or wget)
+        ["src-modify", "src-remove", "pch-modify", "pch-remove"],  # local files to correct, and how to corrupt them
+        ["valid", "corrupt-modify", "corrupt-shrink", "corrupt-remove", "timeout"],  # HTTP file corruption/timeout
+    ),
 )
 def test_http_fallback(patch_tool_tests, http_tool, corrupt_type, http_dir):
     # wipe the http directory
