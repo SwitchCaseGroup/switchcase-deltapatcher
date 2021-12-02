@@ -214,7 +214,7 @@ class DeltaPatcher(DeltaPatcherSettings):
                 # generate xdelta3 if the files don't already match
                 abs_dst_filename = os.path.join(self.dst, dst.name)
                 abs_pch_filename = os.path.join(self.pch, dst.name)
-                xdelta3.add_patch(XDelta3Patch(self.dst, abs_dst_filename, abs_pch_filename, self.zip))
+                xdelta3.add_patch(XDelta3Patch(self.dst, abs_dst_filename, self.pch, abs_pch_filename, self.zip))
             yield xdelta3
 
         # search for destination files without a source and create full-copy patches for them
@@ -222,7 +222,7 @@ class DeltaPatcher(DeltaPatcherSettings):
         for dst in [dst for dst in self.iterate_files("dst") if "sha1" not in self.manifest["dst"][dst.name]]:
             pch_filename = os.path.join(self.pch, dst.name)
             xdelta3 = XDelta3(self.http, self.verbose, None)
-            xdelta3.add_patch(XDelta3Patch(self.dst, dst.path, pch_filename, self.zip))
+            xdelta3.add_patch(XDelta3Patch(self.dst, dst.path, self.pch, pch_filename, self.zip))
             yield xdelta3
 
     def generate_merged(self):
@@ -324,16 +324,17 @@ class DeltaPatcher(DeltaPatcherSettings):
                 # defer patching when destination == source, for in-place patching it would break other deltas
                 if sources == (src_filename == dst_filename):
                     abs_pch_filename = os.path.join(self.pch, pch_filename)
-                    patch = XDelta3Patch(self.dst, abs_dst_filename, abs_pch_filename, self.manifest["pch"][pch_filename]["zip"])
+                    patch = XDelta3Patch(self.dst, abs_dst_filename, self.pch, abs_pch_filename, self.manifest["pch"][pch_filename]["zip"])
                     patch.dst_sha1 = self.manifest["dst"][dst_filename]["sha1"]
                     patch.dst_size = self.manifest["dst"][dst_filename]["size"]
                     patch.pch_sha1 = self.manifest["pch"][pch_filename]["sha1"]
+                    patch.pch_size = self.manifest["pch"][pch_filename]["size"]
                     xdelta3.add_patch(patch)
             # queue up patches for destination files to be directly copied from source directory
             if sources and src_filename in self.manifest["dst"]:
                 if src_entry["sha1"] == self.manifest["dst"][src_filename]["sha1"]:
                     abs_dst_filename = os.path.join(self.dst, src_filename)
-                    patch = XDelta3Patch(self.dst, abs_dst_filename, None, False)
+                    patch = XDelta3Patch(self.dst, abs_dst_filename, self.pch, None, False)
                     patch.dst_sha1 = src_entry["sha1"]
                     patch.dst_size = src_entry["size"]
                     xdelta3.add_patch(patch)
@@ -346,7 +347,8 @@ class DeltaPatcher(DeltaPatcherSettings):
                 abs_pch_filename = os.path.join(self.pch, pch_filename)
                 xdelta3 = XDelta3(self.http, self.verbose, abs_pch_filename)
                 xdelta3.src_sha1 = self.manifest["pch"][pch_filename]["sha1"]
-                patch = XDelta3Patch(self.dst, abs_dst_filename, None, self.manifest["pch"][pch_filename]["zip"])
+                xdelta3.src_size = self.manifest["pch"][pch_filename]["size"]
+                patch = XDelta3Patch(self.dst, abs_dst_filename, self.pch, None, self.manifest["pch"][pch_filename]["zip"])
                 patch.dst_sha1 = self.manifest["dst"][pch_entry["dst"]]["sha1"]
                 patch.dst_size = self.manifest["dst"][pch_entry["dst"]]["size"]
                 xdelta3.add_patch(patch)
@@ -514,9 +516,10 @@ class ManifestEntry:
 
 
 class XDelta3Patch:
-    def __init__(self, dst, dst_filename, pch_filename, zip):
+    def __init__(self, dst, dst_filename, pch, pch_filename, zip):
         self.dst = dst
         self.dst_filename = dst_filename
+        self.pch = pch
         self.pch_filename = pch_filename
         self.dst_sha1 = None
         self.dst_size = None
@@ -580,21 +583,61 @@ class XDelta3:
                 if patch.dst_sha1 == dst_hash:
                     self.trace(f"Skipping already matching {patch.dst_filename}")
                     continue
-                # validate source hash matches the manifest
-                if not src_hash:
-                    src_hash = perform_hash(self.verbose, self.src_filename)
-                if self.src_sha1 != src_hash:
-                    self.error(f"Hash mismatch for {self.src_filename}")
                 # validate patch hash matches the manifest
                 if patch.pch_filename:
+                    # validate source hash matches the manifest
+                    if not src_hash:
+                        src_hash = perform_hash(self.verbose, self.src_filename)
+                    if self.src_sha1 != src_hash:
+                        self.error(f"Hash mismatch for {self.src_filename}")
                     pch_hash = perform_hash(self.verbose, patch.pch_filename)
-                    if patch.pch_sha1 != pch_hash:
-                        self.error(f"Hash mismatch for {patch.pch_filename}")
+                    try:
+                        if patch.pch_sha1 != pch_hash:
+                            self.error(f"Hash mismatch for {patch.pch_filename}")
+                    except:
+                        print(f"ERROR: Failed to apply patch (pch): {sys.exc_info()[1]}")
+                        patch.has_error = True
+                        # fallback to direct download if patch failed
+                        self.tries = int(self.http.get("tries"))
+                        if self.http.get("base", None) is not None and self.http.get("pch", None) is not None:
+                            print(f"Trying to download (pch): {self.http.get('base', 'None')}, {self.http.get('pch', 'None')}, {patch.pch_filename}")
+                            tmp_filename = f"{patch.pch_filename}.part"
+                            while patch.has_error and self.tries > 0:
+                                self.download(patch, "pch", tmp_filename)
+                                self.tries -= 1
+                            if patch.has_error:
+                                print(f"Failed download (pch): {self.http.get('base', 'None')}, {self.http.get('pch', 'None')}, {patch.pch_filename}")
+                        else:
+                            print(f"Skipping download (pch): {self.http.get('base', 'None')}, {self.http.get('pch', 'None')}, {patch.pch_filename}")
+
                     # patch the source file into the destination
-                    self.trace(f"Patching {patch.pch_filename}...")
-                    self.apply_xdelta3(patch)
+                    if not patch.has_error:
+                        self.trace(f"Patching {patch.pch_filename}...")
+                        self.apply_xdelta3(patch)
                 # copy patch file directly to destination
                 else:
+                    # validate source hash matches the manifest
+                    if not src_hash:
+                        src_hash = perform_hash(self.verbose, self.src_filename)
+                    try:
+                        if self.src_sha1 != src_hash:
+                            self.error(f"Hash mismatch for {self.src_filename}")
+                    except:
+                        print(f"ERROR: Failed to apply patch (src): {sys.exc_info()[1]}")
+                        patch.has_error = True
+                        # fallback to direct download if patch failed
+                        self.tries = int(self.http.get("tries"))
+                        if self.http.get("base", None) is not None and self.http.get("pch", None) is not None:
+                            print(f"Trying to download (pch): {self.http.get('base', 'None')}, {self.http.get('pch', 'None')}, {self.src_filename}")
+                            tmp_filename = f"{self.src_filename}.part"
+                            while patch.has_error and self.tries > 0:
+                                self.download(patch, "src", tmp_filename)
+                                self.tries -= 1
+                            if patch.has_error:
+                                print(f"Failed download (pch): {self.http.get('base', 'None')}, {self.http.get('pch', 'None')}, {self.src_filename}")
+                        else:
+                            print(f"Skipping download (pch): {self.http.get('base', 'None')}, {self.http.get('pch', 'None')}, {self.src_filename}")
+
                     self.trace(f"Copying {self.src_filename}...")
                     with open(self.src_filename, "rb") as inpfile:
                         self.atomic_replace_pipe(patch.dst_filename, inpfile.read(), unzip=patch.zip, sha1=patch.dst_sha1)
@@ -607,17 +650,38 @@ class XDelta3:
             if patch.has_error and self.tries > 0 and self.http.get("base", None) is not None:
                 tmp_filename = f"{patch.dst_filename}.part"
                 while patch.has_error and self.tries > 0:
-                    self.download(patch, tmp_filename)
+                    self.download(patch, "dst", tmp_filename)
                     self.tries -= 1
+
+            if patch.has_error:
+                print("REAL ERROR")
 
         return self
 
-    def download(self, patch, tmp_filename):
-        http_dst = self.http.get("dst", None)
-        url = self.http["base"] + (f"{http_dst}/" if http_dst else "") + quote_plus(os.path.relpath(patch.dst_filename, patch.dst), safe="/")
-        if self.http["comp"] != "none":
+    def download(self, patch, dir, tmp_filename):
+        if dir == "src":
+            patch_dir_filename = self.src_filename
+            patch_dir_sha1 = self.src_sha1
+            patch_dir_size = self.src_size
+            patch_dir = patch.pch
+            unzip = None
+        elif dir == "pch":
+            patch_dir_filename = patch.pch_filename
+            patch_dir_sha1 = patch.pch_sha1
+            patch_dir_size = patch.pch_size
+            patch_dir = patch.pch
+            unzip = None
+        else:
+            patch_dir_filename = patch.dst_filename
+            patch_dir_sha1 = patch.dst_sha1
+            patch_dir_size = patch.dst_size
+            patch_dir = patch.dst
+            unzip = self.http["comp"]
+        http_dir = self.http.get("dst" if dir == "dst" else "pch", None)
+        url = self.http["base"] + (f"{http_dir}/" if http_dir else "") + quote_plus(os.path.relpath(patch_dir_filename, patch_dir), safe="/")
+        if self.http["comp"] != "none" and dir == "dst":
             url += f".{self.http['comp']}"
-        self.trace(f"Downloading {url} to {patch.dst_filename}")
+        self.trace(f"Downloading {url} to {patch_dir_filename}")
         try:
             # optionally, use an external command to download the file
             if self.http["tool"]:
@@ -638,7 +702,7 @@ class XDelta3:
                 data = bytearray()
                 with open(tmp_filename, "ab+") as tmpfile:
                     size = tmpfile.tell()
-                    if size >= patch.dst_size:
+                    if size >= patch_dir_size:
                         tmpfile.truncate()
                         tmpfile.seek(0)
                         size = 0
@@ -665,7 +729,7 @@ class XDelta3:
                         data += chunk
                     tmpfile.flush()
                     os.fsync(tmpfile.fileno())
-            self.atomic_replace_pipe(patch.dst_filename, data, unzip=self.http["comp"], sha1=patch.dst_sha1)
+            self.atomic_replace_pipe(patch_dir_filename, data, unzip=unzip, sha1=patch_dir_sha1)
             remove(tmp_filename)
             patch.has_error = False
         except:

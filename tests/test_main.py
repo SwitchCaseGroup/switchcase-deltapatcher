@@ -355,7 +355,7 @@ def test_rsync(patch_tool_tests, inplace, resilience):
 
 
 def corrupt_files(files, dir, type, pch):
-    for filename in files:
+    for filename in [file for file in files if file != "manifest.json"]:
         if dir == "manifest":
             with open(os.path.join(pch, "manifest.json"), "r") as inpfile:
                 local_manifest = json.load(inpfile)
@@ -410,7 +410,7 @@ def corrupt_dirs(patch_tool_tests, src, dst, pch, dir, type):
     if dir == src:
         corrupt_files([file.name for file in patch_tool_tests.iterate_files("src")], dir, type, pch)
     elif dir == pch:
-        corrupt_files([file.name for file in patch_tool_tests.iterate_files("pch") if file.name != "manifest.json"], dir, type, pch)
+        corrupt_files([file.name for file in patch_tool_tests.iterate_files("pch")], dir, type, pch)
     else:
         corrupt_files([file.name for file in patch_tool_tests.iterate_files("dst")], dir, type, pch)
     patch_tool_tests.initialize(src, dst, pch)
@@ -429,7 +429,7 @@ def test_validate_failure(patch_tool_tests, dir, type):
     "http_tool, corrupt_type, http_type",
     product(
         [None, "wget"],  # download method (internal or wget)
-        ["src-modify-dst", "src-remove-dst", "pch-modify-dst", "pch-remove-dst"],  # localDir-localCorruptType-httpDir
+        ["pch-modify-pch", "pch-remove-pch", "src-modify-dst", "src-remove-dst", "pch-modify-dst", "pch-remove-dst"],  # localDir-localCorruptType-httpDir
         ["valid", "corrupt-modify", "corrupt-shrink", "corrupt-remove", "timeout"],  # HTTP file corruption/timeout
     ),
 )
@@ -439,9 +439,13 @@ def test_http_fallback(patch_tool_tests, http_tool, corrupt_type, http_type):
     # wipe the http directory
     shutil.rmtree(http_type, ignore_errors=True)
 
+    # configure manifest HTTP settings
+    patch_tool_tests.http["dst"] = "dst" if http_dir == "dst" else None
+    patch_tool_tests.http["pch"] = "pch" if http_dir == "pch" else None
+
     # copy dst folder into HTTP dst folder
-    http_dst_dir = f"{http_type}/{patch_tool_tests.http['dst']}"
-    patch_tool_tests.copytree("dst", http_dst_dir)
+    http_srv_dir = f"{http_type}/{patch_tool_tests.http[http_dir]}"
+    patch_tool_tests.copytree(http_dir, http_srv_dir)
 
     # configure http_tool:wget
     if http_tool == "wget":
@@ -452,22 +456,22 @@ def test_http_fallback(patch_tool_tests, http_tool, corrupt_type, http_type):
     # corrupt http files
     if "corrupt" in http_type:
         http_corrupt_type = http_type.split("-")[1]
-        corrupt_files([os.path.relpath(x, http_type) for x in Path(http_type).glob("**/*") if x.is_file()], http_type, http_corrupt_type, None)
+        corrupt_files([os.path.relpath(file, http_type) for file in Path(http_type).glob("**/*") if file.is_file()], http_type, http_corrupt_type, None)
 
-    # corrupt src/dst/pch directories
+    # corrupt local files
     corrupt_dirs(patch_tool_tests, "src-http", "dst-http", "pch-http", f"{file_type}-http", corrupt_type)
 
-    # compress http files
-    if patch_tool_tests.zip != "none":
+    # compress http files (only for dst files)
+    if patch_tool_tests.zip != "none" and http_dir == "dst":
         zip2cmd = {"bz2": "bzip2", "gz": "gzip"}
         find = subprocess.Popen(
-            ["find", os.path.abspath(http_dst_dir), "-not", "-name", f"*.{patch_tool_tests.zip}", "-type", "f", "-print0"], stdout=subprocess.PIPE
+            ["find", os.path.abspath(http_srv_dir), "-not", "-name", f"*.{patch_tool_tests.zip}", "-type", "f", "-print0"], stdout=subprocess.PIPE
         )
         subprocess.check_output(["xargs", "-0", zip2cmd[patch_tool_tests.zip]], stdin=find.stdout)
         find.wait()
 
     # start HTTP server
-    patch_tool_tests.start_http(os.path.abspath(http_type), "corrupt" not in http_type)
+    patch_tool_tests.start_http(os.path.abspath(http_type), "timeout" in http_type)
 
     # perform the actual test
     try:
