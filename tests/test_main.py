@@ -272,10 +272,15 @@ class DeltaPatcherTests(DeltaPatcher):
                 retries -= 1
 
     def copytree(self, src, dst):
-        try:
-            shutil.copytree(src, dst)
-        except:
-            print(f"shutil.copytree: {sys.exc_info()[1]}")
+        retries = 50
+        while retries:
+            try:
+                shutil.copytree(src, dst)
+                return
+            except:
+                print(f"shutil.copytree: {sys.exc_info()[1]}")
+                time.sleep(0.10)
+                retries -= 1
 
 
 @pytest.fixture(scope="module", params=["none", "bz2", "gz"])
