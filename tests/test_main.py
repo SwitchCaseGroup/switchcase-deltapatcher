@@ -5,8 +5,10 @@ import random
 import shutil
 import pytest
 import base64
+import time
 import json
 import stat
+import sys
 import os
 
 from RangeHTTPServer import RangeRequestHandler
@@ -100,8 +102,7 @@ class DeltaPatcherTests(DeltaPatcher):
         random.seed(0)
         # prepare temp directory (fail if we can't wipe it clean)
         self.tmpdir = os.path.join(tempfile.gettempdir(), "deltapatcher-test")
-        if os.path.isdir(self.tmpdir):
-            shutil.rmtree(self.tmpdir)
+        self.rmtree(self.tmpdir)
         os.makedirs(self.tmpdir)
         # work within temp directory
         os.chdir(self.tmpdir)
@@ -122,12 +123,12 @@ class DeltaPatcherTests(DeltaPatcher):
         super().__del__()
 
     def cleanup(self):
-        shutil.rmtree(os.path.abspath("src"), ignore_errors=True)
-        shutil.rmtree(os.path.abspath("dst"), ignore_errors=True)
-        shutil.rmtree(os.path.abspath("out"), ignore_errors=True)
-        shutil.rmtree(os.path.abspath("pch"), ignore_errors=True)
+        self.rmtree(os.path.abspath("src"))
+        self.rmtree(os.path.abspath("dst"))
+        self.rmtree(os.path.abspath("out"))
+        self.rmtree(os.path.abspath("pch"))
         for (inplace, resilience) in [(False, False), (False, True), (True, False), (True, True)]:
-            shutil.rmtree(os.path.abspath(self.get_out_dir(inplace, resilience)), ignore_errors=True)
+            self.rmtree(os.path.abspath(self.get_out_dir(inplace, resilience)))
         self.stop_http()
 
     def start_http(self, http_dir, timeout):
@@ -258,11 +259,23 @@ class DeltaPatcherTests(DeltaPatcher):
     def get_out_dir(self, inplace, resilience):
         return f'out{"_inplace" if inplace else ""}{"_resilience" if resilience else ""}'
 
+    def rmtree(self, dir):
+        retries = 50
+        while retries:
+            try:
+                if os.path.isdir(dir):
+                    shutil.rmtree(dir)
+                return
+            except:
+                print(f"shutil.rmtree: {sys.exc_info()[1]}")
+                time.sleep(0.10)
+                retries -= 1
+
     def copytree(self, src, dst):
         try:
             shutil.copytree(src, dst)
         except:
-            pass
+            print(f"shutil.copytree: {sys.exc_info()[1]}")
 
 
 @pytest.fixture(scope="module", params=["none", "bz2", "gz"])
@@ -399,9 +412,9 @@ def corrupt_files(files, dir, type, pch):
 
 
 def corrupt_dirs(patch_tool_tests, src, dst, pch, dir, type):
-    shutil.rmtree(src, ignore_errors=True)
-    shutil.rmtree(dst, ignore_errors=True)
-    shutil.rmtree(pch, ignore_errors=True)
+    patch_tool_tests.rmtree(src)
+    patch_tool_tests.rmtree(dst)
+    patch_tool_tests.rmtree(pch)
     patch_tool_tests.copytree("src", src)
     if dir == dst:  # use empty dst directory when testing corrupted src, otherwise dst files would just be skipped :)
         patch_tool_tests.copytree("dst", dst)
@@ -437,7 +450,7 @@ def test_http_fallback(patch_tool_tests, http_tool, corrupt_type, http_type):
     # parse corrupt_type into component parameters
     (file_type, corrupt_type, http_dir) = corrupt_type.split("-")
     # wipe the http directory
-    shutil.rmtree(http_type, ignore_errors=True)
+    patch_tool_tests.rmtree(http_type)
 
     # configure manifest HTTP settings
     patch_tool_tests.http["dst"] = "dst" if http_dir == "dst" else None
