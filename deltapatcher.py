@@ -665,6 +665,7 @@ class XDelta3:
         if self.http["comp"] != "none" and dir == "dst":
             url += f".{self.http['comp']}"
         self.trace(f"Downloading {url} to {patch_dir_filename}")
+        makedirs(os.path.dirname(patch_dir_filename))
         try:
             # optionally, use an external command to download the file
             if self.http["tool"]:
