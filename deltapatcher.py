@@ -615,12 +615,13 @@ class XDelta3:
                             self.error(patch, f"Hash mismatch for {self.src_filename}")
                     except:
                         # fallback to direct download if patch failed
-                        self.tries = int(self.http.get("tries"))
-                        if self.http.get("base", None) is not None and self.http.get("pch", None) is not None:
-                            tmp_filename = f"{self.src_filename}.part"
-                            while patch.has_error and self.tries > 0:
-                                self.download(patch, "src", tmp_filename)
-                                self.tries -= 1
+                        if self.src_filename.startswith(patch.pch):
+                            self.tries = int(self.http.get("tries"))
+                            if self.http.get("base", None) is not None and self.http.get("pch", None) is not None:
+                                tmp_filename = f"{self.src_filename}.part"
+                                while patch.has_error and self.tries > 0:
+                                    self.download(patch, "src", tmp_filename)
+                                    self.tries -= 1
 
                     # copy the source file into the destination
                     if not patch.has_error:
