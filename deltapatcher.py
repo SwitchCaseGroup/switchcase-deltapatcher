@@ -280,7 +280,7 @@ class DeltaPatcher(DeltaPatcherSettings):
             mkdir(os.path.join(self.dst, name), mode=entry["mode"])
 
         # perform patching in parallel (first sources, then dependents)
-        for sources in [ False, True]:
+        for sources in [False, True]:
             for xdelta3 in self.pool.imap_unordered(XDelta3.apply_patches, self.apply_queue(sources)):
                 for patch in [patch for patch in xdelta3.patches if patch.has_error]:
                     self.has_error = True
@@ -622,9 +622,11 @@ class XDelta3:
                                 self.download(patch, "src", tmp_filename)
                                 self.tries -= 1
 
-                    self.trace(f"Copying {self.src_filename}...")
-                    with open(self.src_filename, "rb") as inpfile:
-                        self.atomic_replace_pipe(patch, patch.dst_filename, inpfile.read(), unzip=patch.zip, sha1=patch.dst_sha1)
+                    # copy the source file into the destination
+                    if not patch.has_error:
+                        self.trace(f"Copying {self.src_filename}...")
+                        with open(self.src_filename, "rb") as inpfile:
+                            self.atomic_replace_pipe(patch, patch.dst_filename, inpfile.read(), unzip=patch.zip, sha1=patch.dst_sha1)
             except:
                 pass
 
