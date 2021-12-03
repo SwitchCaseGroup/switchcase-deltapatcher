@@ -591,8 +591,8 @@ class XDelta3:
                         src_hash = perform_hash(self.verbose, self.src_filename)
                     if self.src_sha1 != src_hash:
                         self.error(f"Hash mismatch for {self.src_filename}")
-                    pch_hash = perform_hash(self.verbose, patch.pch_filename)
                     try:
+                        pch_hash = perform_hash(self.verbose, patch.pch_filename)
                         if patch.pch_sha1 != pch_hash:
                             self.error(f"Hash mismatch for {patch.pch_filename}")
                     except:
@@ -601,15 +601,10 @@ class XDelta3:
                         # fallback to direct download if patch failed
                         self.tries = int(self.http.get("tries"))
                         if self.http.get("base", None) is not None and self.http.get("pch", None) is not None:
-                            print(f"Trying to download (pch): {self.http.get('base', 'None')}, {self.http.get('pch', 'None')}, {patch.pch_filename}")
                             tmp_filename = f"{patch.pch_filename}.part"
                             while patch.has_error and self.tries > 0:
                                 self.download(patch, "pch", tmp_filename)
                                 self.tries -= 1
-                            if patch.has_error:
-                                print(f"Failed download (pch): {self.http.get('base', 'None')}, {self.http.get('pch', 'None')}, {patch.pch_filename}")
-                        else:
-                            print(f"Skipping download (pch): {self.http.get('base', 'None')}, {self.http.get('pch', 'None')}, {patch.pch_filename}")
 
                     # patch the source file into the destination
                     if not patch.has_error:
@@ -629,15 +624,10 @@ class XDelta3:
                         # fallback to direct download if patch failed
                         self.tries = int(self.http.get("tries"))
                         if self.http.get("base", None) is not None and self.http.get("pch", None) is not None:
-                            print(f"Trying to download (pch): {self.http.get('base', 'None')}, {self.http.get('pch', 'None')}, {self.src_filename}")
                             tmp_filename = f"{self.src_filename}.part"
                             while patch.has_error and self.tries > 0:
                                 self.download(patch, "src", tmp_filename)
                                 self.tries -= 1
-                            if patch.has_error:
-                                print(f"Failed download (pch): {self.http.get('base', 'None')}, {self.http.get('pch', 'None')}, {self.src_filename}")
-                        else:
-                            print(f"Skipping download (pch): {self.http.get('base', 'None')}, {self.http.get('pch', 'None')}, {self.src_filename}")
 
                     self.trace(f"Copying {self.src_filename}...")
                     with open(self.src_filename, "rb") as inpfile:
@@ -653,9 +643,6 @@ class XDelta3:
                 while patch.has_error and self.tries > 0:
                     self.download(patch, "dst", tmp_filename)
                     self.tries -= 1
-
-            if patch.has_error:
-                print("REAL ERROR")
 
         return self
 
