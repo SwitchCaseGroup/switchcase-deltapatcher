@@ -279,17 +279,13 @@ class DeltaPatcher(DeltaPatcherSettings):
         for (name, entry) in sorted(self.iterate_manifest("dst", True), key=lambda tuple: tuple[0]):
             mkdir(os.path.join(self.dst, name), mode=entry["mode"])
 
-        # perform patching in parallel (dependent files)
-        for xdelta3 in self.pool.imap_unordered(XDelta3.apply_patches, self.apply_queue(False)):
-            self.has_error = self.has_error or any([patch.has_error for patch in xdelta3.patches])
-            if self.has_error and self.stop_on_error:
-                raise ValueError("Failed to apply")
-
-        # perform patching in parallel (dependencies)
-        for xdelta3 in self.pool.imap_unordered(XDelta3.apply_patches, self.apply_queue(True)):
-            self.has_error = self.has_error or any([patch.has_error for patch in xdelta3.patches])
-            if self.has_error and self.stop_on_error:
-                raise ValueError("Failed to apply")
+        # perform patching in parallel (first sources, then dependents)
+        for sources in [ False, True]:
+            for xdelta3 in self.pool.imap_unordered(XDelta3.apply_patches, self.apply_queue(sources)):
+                for patch in [patch for patch in xdelta3.patches if patch.has_error]:
+                    self.has_error = True
+                    if self.stop_on_error:
+                        raise ValueError(f"ERROR: {patch.error_message}")
 
         # remove any files not in the manifest
         for entry in [entry for entry in self.iterate_files("dst") if entry.name not in self.manifest["dst"]]:
@@ -527,6 +523,7 @@ class XDelta3Patch:
         self.pch_sha1 = None
         self.zip = zip
         self.has_error = False
+        self.error_message = "unknown"
 
 
 class XDelta3:
@@ -554,7 +551,7 @@ class XDelta3:
                 self.trace(f"Copying direct patch for {patch.dst_filename}...")
                 self.update_pch_filename(patch, delta=False)
                 with open(patch.dst_filename, "rb") as inpfile:
-                    patch.pch_sha1 = self.atomic_replace_pipe(patch.pch_filename, inpfile.read(), zip=patch.zip)
+                    patch.pch_sha1 = self.atomic_replace_pipe(patch, patch.pch_filename, inpfile.read(), zip=patch.zip)
             # otherwise, if the destination hash don't already match, create a patch
             elif self.src_sha1 != patch.dst_sha1:
                 self.trace(f"Creating delta for {patch.dst_filename}...")
@@ -562,7 +559,7 @@ class XDelta3:
                 command = ["xdelta3", "-e", "-0", "-B", str(max(self.src_size, 1 * 1024 * 1024)), "-f", "-c", "-s", self.src_filename, patch.dst_filename]
                 self.trace(" ".join(command))
                 process = execute_pipe(command)
-                patch.pch_sha1 = self.atomic_replace_pipe(patch.pch_filename, process.stdout.read(), zip=patch.zip)
+                patch.pch_sha1 = self.atomic_replace_pipe(patch, patch.pch_filename, process.stdout.read(), zip=patch.zip)
         return self
 
     def update_pch_filename(self, patch, delta):
@@ -590,14 +587,12 @@ class XDelta3:
                     if not src_hash:
                         src_hash = perform_hash(self.verbose, self.src_filename)
                     if self.src_sha1 != src_hash:
-                        self.error(f"Hash mismatch for {self.src_filename}")
+                        self.error(patch, f"Hash mismatch for {self.src_filename}")
                     try:
                         pch_hash = perform_hash(self.verbose, patch.pch_filename)
                         if patch.pch_sha1 != pch_hash:
-                            self.error(f"Hash mismatch for {patch.pch_filename}")
+                            self.error(patch, f"Hash mismatch for {patch.pch_filename}")
                     except:
-                        print(f"ERROR: Failed to apply patch (pch): {sys.exc_info()[1]}")
-                        patch.has_error = True
                         # fallback to direct download if patch failed
                         self.tries = int(self.http.get("tries"))
                         if self.http.get("base", None) is not None and self.http.get("pch", None) is not None:
@@ -617,10 +612,8 @@ class XDelta3:
                         src_hash = perform_hash(self.verbose, self.src_filename)
                     try:
                         if self.src_sha1 != src_hash:
-                            self.error(f"Hash mismatch for {self.src_filename}")
+                            self.error(patch, f"Hash mismatch for {self.src_filename}")
                     except:
-                        print(f"ERROR: Failed to apply patch (src): {sys.exc_info()[1]}")
-                        patch.has_error = True
                         # fallback to direct download if patch failed
                         self.tries = int(self.http.get("tries"))
                         if self.http.get("base", None) is not None and self.http.get("pch", None) is not None:
@@ -631,10 +624,9 @@ class XDelta3:
 
                     self.trace(f"Copying {self.src_filename}...")
                     with open(self.src_filename, "rb") as inpfile:
-                        self.atomic_replace_pipe(patch.dst_filename, inpfile.read(), unzip=patch.zip, sha1=patch.dst_sha1)
+                        self.atomic_replace_pipe(patch, patch.dst_filename, inpfile.read(), unzip=patch.zip, sha1=patch.dst_sha1)
             except:
-                print(f"ERROR: Failed to apply patch: {sys.exc_info()[1]}")
-                patch.has_error = True
+                pass
 
             # fallback to direct download if patch failed
             self.tries = int(self.http.get("tries"))
@@ -717,12 +709,13 @@ class XDelta3:
                         data += chunk
                     tmpfile.flush()
                     os.fsync(tmpfile.fileno())
-            self.atomic_replace_pipe(patch_dir_filename, data, unzip=unzip, sha1=patch_dir_sha1)
+            self.atomic_replace_pipe(patch, patch_dir_filename, data, unzip=unzip, sha1=patch_dir_sha1)
             remove(tmp_filename)
             patch.has_error = False
         except:
-            print(f"ERROR: Failed to direct download {url}: {sys.exc_info()[1]}")
+            patch.error_message = f"Failed to direct download {url}: {sys.exc_info()[1]}"
             patch.has_error = True
+            print(patch.error_message)
 
     def apply_xdelta3(self, patch):
         command = ["xdelta3", "-d", "-B", str(max(self.src_size, 1 * 1024 * 1024)), "-f", "-c", "-s", self.src_filename]
@@ -736,9 +729,9 @@ class XDelta3:
             inpfile = open(patch.pch_filename, "rb")
         data = process.communicate(inpfile.read())[0]
         inpfile.close()
-        self.atomic_replace_pipe(patch.dst_filename, data, sha1=patch.dst_sha1)
+        self.atomic_replace_pipe(patch, patch.dst_filename, data, sha1=patch.dst_sha1)
 
-    def atomic_replace_pipe(self, dst, data, zip=None, unzip=None, sha1=None):
+    def atomic_replace_pipe(self, patch, dst, data, zip=None, unzip=None, sha1=None):
         tmp = f"{dst}.tmp"
         # copy pipe to temporary file while hashing its contents
         hash = hashlib.sha1()
@@ -755,7 +748,7 @@ class XDelta3:
         # validate the digest
         digest = hash.hexdigest()
         if sha1 and sha1 != digest:
-            self.error(f"Hash mismatch for {dst}!")
+            self.error(patch, f"Hash mismatch for {dst}!")
         # perform atomic replace of temporary file
         self.replace(tmp, dst)
         return digest
@@ -774,7 +767,10 @@ class XDelta3:
         if self.verbose and len(text):
             print(text)
 
-    def error(self, str):
+    def error(self, patch, str):
+        patch.error_message = str
+        patch.has_error = True
+        print(patch.error_message)
         raise ValueError(str)
 
 
