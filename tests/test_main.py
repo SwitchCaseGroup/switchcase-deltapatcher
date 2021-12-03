@@ -275,7 +275,8 @@ class DeltaPatcherTests(DeltaPatcher):
         retries = 50
         while retries:
             try:
-                shutil.copytree(src, dst, dirs_exist_ok=True)
+                self.rmtree(dst)
+                shutil.copytree(src, dst)
                 return
             except:
                 print(f"shutil.copytree: {sys.exc_info()[1]}")
