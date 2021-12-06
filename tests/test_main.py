@@ -134,6 +134,7 @@ class DeltaPatcherTests(DeltaPatcher):
     def start_http(self, http_dir, timeout):
         self.http_server = multiprocessing.Process(target=http_server, args=(http_dir, timeout))
         self.http_server.start()
+        time.sleep(0.5)
 
     def stop_http(self):
         if self.http_server:
