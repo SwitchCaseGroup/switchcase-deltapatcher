@@ -34,7 +34,6 @@ jobs:
           sudo apt-get install -y xdelta3
         env:
           DEBIAN_FRONTEND: "noninteractive"
-    testsFolder: tests/ -x
 - template: jobs/build_deb.yml@templates
   parameters:
     artifactName: "expresso-deltapatcher"
