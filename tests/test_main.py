@@ -259,6 +259,18 @@ class DeltaPatcherTests(DeltaPatcher):
     def get_out_dir(self, inplace, resilience):
         return f'out{"_inplace" if inplace else ""}{"_resilience" if resilience else ""}'
 
+    def rmtree(self, dir):
+        retries = 50
+        while retries:
+            try:
+                if os.path.isdir(dir):
+                    shutil.rmtree(dir)
+                return
+            except:
+                print(f"shutil.rmtree: {sys.exc_info()[1]}")
+                time.sleep(0.10)
+                retries -= 1
+
     def copytree(self, src, dst):
         retries = 50
         while retries:
@@ -482,9 +494,6 @@ def test_http_fallback(patch_tool_tests, http_tool, corrupt_type, http_type):
 
     # perform the actual test
     try:
-        # exception could leave zombie workers, re-init to flush the pool
-        patch_tool_tests.initialize("src-http", "dst-http", "pch-http")
-
         # expect error if http fallback is corrupted
         if "corrupt" in http_type:
             with pytest.raises(ValueError):
@@ -504,4 +513,6 @@ def test_http_fallback(patch_tool_tests, http_tool, corrupt_type, http_type):
             patch_tool_tests.validation_dirs = "d"
             patch_tool_tests.validate()
     finally:
+        # exception could leave zombie workers, re-init to flush the pool
+        patch_tool_tests.initialize("src-http", "dst-http", "pch-http")
         patch_tool_tests.stop_http()
