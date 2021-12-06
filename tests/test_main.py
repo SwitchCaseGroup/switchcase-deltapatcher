@@ -259,18 +259,6 @@ class DeltaPatcherTests(DeltaPatcher):
     def get_out_dir(self, inplace, resilience):
         return f'out{"_inplace" if inplace else ""}{"_resilience" if resilience else ""}'
 
-    def rmtree(self, dir):
-        retries = 50
-        while retries:
-            try:
-                if os.path.isdir(dir):
-                    shutil.rmtree(dir)
-                return
-            except:
-                print(f"shutil.rmtree: {sys.exc_info()[1]}")
-                time.sleep(0.10)
-                retries -= 1
-
     def copytree(self, src, dst):
         retries = 50
         while retries:

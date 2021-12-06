@@ -10,6 +10,7 @@ import hashlib
 import signal
 import shutil
 import base64
+import time
 import gzip
 import stat
 import json
@@ -127,7 +128,7 @@ class DeltaPatcher(DeltaPatcherSettings):
     def generate(self):
         # cleanup the patch directory
         self.trace(f"Cleaning {self.pch}...")
-        shutil.rmtree(self.pch, ignore_errors=True)
+        self.rmtree(self.pch)
         makedirs(self.pch)
 
         # populate src/dst manifest with files/dirs metadata
@@ -295,7 +296,7 @@ class DeltaPatcher(DeltaPatcherSettings):
         # remove any directories not in the manifest
         for entry in [entry for entry in self.iterate_dirs("dst") if entry.name not in self.manifest["dst"]]:
             self.trace(f"Removing {entry.name}...")
-            shutil.rmtree(os.path.join(self.dst, entry.name), ignore_errors=True)
+            self.rmtree(os.path.join(self.dst, entry.name))
 
         # apply file properties
         self.trace(f"Applying file properties...")
@@ -488,6 +489,18 @@ class DeltaPatcher(DeltaPatcherSettings):
         print(f"Case insensitive savings could be at most {case_insensitive_size:,} bytes")
         print(f"Moved file savings could be at most {moved_file_size:,} bytes")
         print(f"Large patch savings would be {large_patch_size:,} bytes")
+
+    def rmtree(self, dir):
+        retries = 50
+        while retries:
+            try:
+                if os.path.isdir(dir):
+                    shutil.rmtree(dir)
+                return
+            except:
+                print(f"shutil.rmtree: {sys.exc_info()[1]}")
+                time.sleep(0.10)
+                retries -= 1
 
     def trace(self, str):
         trace(self.verbose, str)
