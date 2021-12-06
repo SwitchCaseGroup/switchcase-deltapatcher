@@ -676,7 +676,7 @@ class XDelta3:
                 environ["HTTP_PASS"] = self.http["pass"] if self.http["pass"] else ""
                 environ["HTTP_COMP"] = self.http["comp"] if self.http["comp"] else ""
                 environ["HTTP_TIMEOUT"] = self.http["timeout"] if self.http["timeout"] else ""
-                environ["HTTP_TRIES"] = self.http["tries"] if self.http["tries"] else ""
+                environ["HTTP_TRIES"] = "1" # we're looping on tries ourselves, external tool should try only once
                 process = execute_pipe(self.http["tool"], env=environ, shell=True)
                 process.wait()
                 self.trace(process.stdout.read().decode("utf-8").strip())
