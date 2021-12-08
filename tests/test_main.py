@@ -1,9 +1,7 @@
 import multiprocessing
 import subprocess
 import tempfile
-import argparse
 import random
-import signal
 import shutil
 import pytest
 import base64
@@ -11,9 +9,7 @@ import time
 import json
 import stat
 import sys
-import re
 import os
-import io
 
 from RangeHTTPServer import RangeRequestHandler
 from http.server import HTTPServer
@@ -45,17 +41,20 @@ class AuthHTTPRequestHandler(RangeRequestHandler):
     def do_GET(self):
         global g_timeout_path
         global g_timeout_count
-        # enable timeout for the first path fetched
-        if g_timeout_path is None:
-            g_timeout_path = self.path
-        # timeout the first two attempts
-        if self.path == g_timeout_path and g_timeout_count > 0:
-            g_timeout_count -= 1
-            return
         if self.headers.get("Authorization") == None:
             self.do_AUTHHEAD()
             self.wfile.write(b"no auth header received")
         elif self.headers.get("Authorization") == ("Basic " + self._auth):
+            # enable timeout for the first path fetched
+            if g_timeout_path is None:
+                g_timeout_path = self.path
+            # timeout the first two attempts
+            if self.path == g_timeout_path and g_timeout_count > 0:
+                # @todo wget makes multiple requests even with --tries 1 and it messes up
+                # unit tests if we try to track tries count perfectly, for now disabling
+                # this strict test
+                # g_timeout_count -= 1
+                return
             RangeRequestHandler.do_GET(self)
         else:
             self.do_AUTHHEAD()
@@ -100,13 +99,13 @@ class DeltaPatcherTests(DeltaPatcher):
         settings.http["comp"] = zip
         settings.http["timeout"] = "60"
         settings.http["tries"] = "5"
+        settings.http["dst"] = "dst"
         super().__init__(settings)
         # repeatability
         random.seed(0)
         # prepare temp directory (fail if we can't wipe it clean)
         self.tmpdir = os.path.join(tempfile.gettempdir(), "deltapatcher-test")
-        if os.path.isdir(self.tmpdir):
-            shutil.rmtree(self.tmpdir)
+        self.rmtree(self.tmpdir)
         os.makedirs(self.tmpdir)
         # work within temp directory
         os.chdir(self.tmpdir)
@@ -127,17 +126,18 @@ class DeltaPatcherTests(DeltaPatcher):
         super().__del__()
 
     def cleanup(self):
-        shutil.rmtree(os.path.abspath("src"), ignore_errors=True)
-        shutil.rmtree(os.path.abspath("dst"), ignore_errors=True)
-        shutil.rmtree(os.path.abspath("out"), ignore_errors=True)
-        shutil.rmtree(os.path.abspath("pch"), ignore_errors=True)
+        self.rmtree(os.path.abspath("src"))
+        self.rmtree(os.path.abspath("dst"))
+        self.rmtree(os.path.abspath("out"))
+        self.rmtree(os.path.abspath("pch"))
         for (inplace, resilience) in [(False, False), (False, True), (True, False), (True, True)]:
-            shutil.rmtree(os.path.abspath(self.get_out_dir(inplace, resilience)), ignore_errors=True)
+            self.rmtree(os.path.abspath(self.get_out_dir(inplace, resilience)))
         self.stop_http()
 
     def start_http(self, http_dir, timeout):
         self.http_server = multiprocessing.Process(target=http_server, args=(http_dir, timeout))
         self.http_server.start()
+        time.sleep(0.5)
 
     def stop_http(self):
         if self.http_server:
@@ -263,11 +263,29 @@ class DeltaPatcherTests(DeltaPatcher):
     def get_out_dir(self, inplace, resilience):
         return f'out{"_inplace" if inplace else ""}{"_resilience" if resilience else ""}'
 
+    def rmtree(self, dir):
+        retries = 50
+        while retries:
+            try:
+                if os.path.isdir(dir):
+                    shutil.rmtree(dir)
+                return
+            except:
+                print(f"shutil.rmtree: {sys.exc_info()[1]}")
+                time.sleep(0.10)
+                retries -= 1
+
     def copytree(self, src, dst):
-        try:
-            shutil.copytree(src, dst)
-        except:
-            pass
+        retries = 50
+        while retries:
+            try:
+                self.rmtree(dst)
+                shutil.copytree(src, dst)
+                return
+            except:
+                print(f"shutil.copytree: {sys.exc_info()[1]}")
+                time.sleep(0.10)
+                retries -= 1
 
 
 @pytest.fixture(scope="module", params=["none", "bz2", "gz"])
@@ -360,7 +378,7 @@ def test_rsync(patch_tool_tests, inplace, resilience):
 
 
 def corrupt_files(files, dir, type, pch):
-    for filename in files:
+    for filename in [file for file in files if file != "manifest.json"]:
         if dir == "manifest":
             with open(os.path.join(pch, "manifest.json"), "r") as inpfile:
                 local_manifest = json.load(inpfile)
@@ -404,15 +422,20 @@ def corrupt_files(files, dir, type, pch):
 
 
 def corrupt_dirs(patch_tool_tests, src, dst, pch, dir, type):
-    shutil.rmtree(src, ignore_errors=True)
-    shutil.rmtree(dst, ignore_errors=True)
-    shutil.rmtree(pch, ignore_errors=True)
+    patch_tool_tests.rmtree(src)
+    patch_tool_tests.rmtree(dst)
+    patch_tool_tests.rmtree(pch)
     patch_tool_tests.copytree("src", src)
-    if dir != src:  # use empty dst directory when testing corrupted src, otherwise dst files would just be skipped :)
+    if dir == dst:  # use empty dst directory when testing corrupted src, otherwise dst files would just be skipped :)
         patch_tool_tests.copytree("dst", dst)
     patch_tool_tests.copytree("pch", pch)
     patch_tool_tests.initialize(src, dst, pch)
-    corrupt_files([file.name for file in patch_tool_tests.iterate_files("src" if dir == src else "dst")], dir, type, pch)
+    if dir == src:
+        corrupt_files([file.name for file in patch_tool_tests.iterate_files("src")], dir, type, pch)
+    elif dir == pch:
+        corrupt_files([file.name for file in patch_tool_tests.iterate_files("pch")], dir, type, pch)
+    else:
+        corrupt_files([file.name for file in patch_tool_tests.iterate_files("dst")], dir, type, pch)
     patch_tool_tests.initialize(src, dst, pch)
 
 
@@ -426,43 +449,66 @@ def test_validate_failure(patch_tool_tests, dir, type):
 
 
 @pytest.mark.parametrize(
-    "http_tool, http_type, file_type, http_dir", product([None, "wget"], ["modify", "shrink"], ["modify", "remove"], ["corrupt", "timeout", "valid"])
+    "http_tool, corrupt_type, http_type",
+    product(
+        [None, "wget"],  # download method (internal or wget)
+        ["pch-modify-pch", "pch-remove-pch", "src-modify-dst", "src-remove-dst", "pch-modify-dst", "pch-remove-dst"],  # localDir-localCorruptType-httpDir
+        ["valid", "corrupt-modify", "corrupt-shrink", "corrupt-remove", "timeout"],  # HTTP file corruption/timeout
+    ),
 )
-def test_http_fallback(patch_tool_tests, http_tool, http_type, file_type, http_dir):
-    # copy initially destination from pristine dst folder
-    shutil.rmtree(http_dir, ignore_errors=True)
-    patch_tool_tests.copytree("dst", http_dir)
-    # wget http tool
+def test_http_fallback(patch_tool_tests, http_tool, corrupt_type, http_type):
+    # parse corrupt_type into component parameters
+    (file_type, corrupt_type, http_dir) = corrupt_type.split("-")
+    # wipe the http directory
+    patch_tool_tests.rmtree(http_type)
+
+    # configure manifest HTTP settings
+    patch_tool_tests.http["dst"] = "dst" if http_dir == "dst" else None
+    patch_tool_tests.http["pch"] = "pch" if http_dir == "pch" else None
+
+    # copy dst folder into HTTP dst folder
+    http_srv_dir = f"{http_type}/{patch_tool_tests.http[http_dir]}"
+    patch_tool_tests.copytree(http_dir, http_srv_dir)
+
+    # configure http_tool:wget
     if http_tool == "wget":
         patch_tool_tests.http["tool"] = "wget $HTTP_URL -q -O $HTTP_FILE --user $HTTP_USER --password $HTTP_PASS --timeout $HTTP_TIMEOUT --tries $HTTP_TRIES"
         patch_tool_tests.http["user"] = "test"
         patch_tool_tests.http["pass"] = "pass"
+
     # corrupt http files
-    if http_dir == "corrupt":
-        corrupt_files([os.path.relpath(x, http_dir) for x in Path(http_dir).glob("*") if x.is_file()], http_dir, http_type, None)
-    # corrupt src/dst/pch directories
-    corrupt_dirs(patch_tool_tests, "src-http", "dst-http", "pch-http", "src-http", file_type)
-    # compress http files
-    if patch_tool_tests.zip != "none":
+    if "corrupt" in http_type:
+        http_corrupt_type = http_type.split("-")[1]
+        corrupt_files([os.path.relpath(file, http_type) for file in Path(http_type).glob("**/*") if file.is_file()], http_type, http_corrupt_type, None)
+
+    # corrupt local files
+    corrupt_dirs(patch_tool_tests, "src-http", "dst-http", "pch-http", f"{file_type}-http", corrupt_type)
+
+    # compress http files (only for dst files)
+    if patch_tool_tests.zip != "none" and http_dir == "dst":
         zip2cmd = {"bz2": "bzip2", "gz": "gzip"}
         find = subprocess.Popen(
-            ["find", os.path.abspath(http_dir), "-not", "-name", f"*.{patch_tool_tests.zip}", "-type", "f", "-print0"], stdout=subprocess.PIPE
+            ["find", os.path.abspath(http_srv_dir), "-not", "-name", f"*.{patch_tool_tests.zip}", "-type", "f", "-print0"], stdout=subprocess.PIPE
         )
         subprocess.check_output(["xargs", "-0", zip2cmd[patch_tool_tests.zip]], stdin=find.stdout)
         find.wait()
-    patch_tool_tests.start_http(os.path.abspath(http_dir), http_dir != "corrupt")
+
+    # start HTTP server
+    patch_tool_tests.start_http(os.path.abspath(http_type), "timeout" in http_type)
+
+    # perform the actual test
     try:
-        # exception could leave zombie workers, re-init to flush the pool
-        patch_tool_tests.initialize("src-http", "dst-http", "pch-http")
         # expect error if http fallback is corrupted
-        if http_dir == "corrupt":
+        if "corrupt" in http_type:
             with pytest.raises(ValueError):
                 patch_tool_tests.apply()
-        elif http_dir == "timeout":
+        # expect error if http times out
+        elif http_type == "timeout":
             patch_tool_tests.http["timeout"] = "5"
             patch_tool_tests.http["tries"] = "1"
             with pytest.raises(ValueError):
                 patch_tool_tests.apply()
+        # otherwise, expect success
         else:
             patch_tool_tests.http["timeout"] = "5"
             patch_tool_tests.http["tries"] = "5"
@@ -471,4 +517,6 @@ def test_http_fallback(patch_tool_tests, http_tool, http_type, file_type, http_d
             patch_tool_tests.validation_dirs = "d"
             patch_tool_tests.validate()
     finally:
+        # exception could leave zombie workers, re-init to flush the pool
+        patch_tool_tests.initialize("src-http", "dst-http", "pch-http")
         patch_tool_tests.stop_http()

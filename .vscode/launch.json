@@ -53,6 +53,16 @@
                 "/tmp/test-pch"
             ],
             "console": "integratedTerminal"
+        },
+        {
+            "name": "Python - Debug deltapatcher (pytest)",
+            "type": "python",
+            "request": "launch",
+            "module": "pytest",
+            "args": [
+                "-v",
+            ],
+            "console": "integratedTerminal"
         }
     ]
 }
