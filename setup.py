@@ -4,7 +4,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='expresso-deltapatcher',
-    version='0.2.1',
+    version='0.2.2',
     include_package_data=True,
     description="Expresso Delta Patcher",
     packages=find_packages(),
