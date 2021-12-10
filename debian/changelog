@@ -1,3 +1,38 @@
+expresso-deltapatcher (0.2.2) ubuntu2004; urgency=medium
+
+  * bump azure piplines to v4.11.0
+  * add optional HTTP subdirectory arguments
+  * will only need to compress dst files for HTTP
+  * eliminate redundant tests
+  * run the valid test first
+  * add test for removed http files
+  * cleanup
+  * test corrupting patch files
+  * prepare for pch HTTP fallback test
+  * draft implementation of pch HTTP fallback
+  * persistently remove test files
+  * persistently copytree too??
+  * minor cleanup
+  * cleanup, remove debug code
+  * improve error messaging and other cleanup
+  * don't try copying if there was an error
+  * Handle case with corrupt src with direct patch copy
+  * ensure directory exists when downloading
+  * handle already existing directory structure
+  * remove flag only available 3.8+
+  * hack attempt to fail after first test
+  * try adding some error resilience to rmtree
+  * revert last commit, cleanup zombies in finally
+  * stop after first failure again..
+  * wait for http to start
+  * fix external tool tries count
+  * remove single test failure hack
+  * deal w/wget making multiple requests per "try" messing up test reliability
+  * update version
+  * azure piplines: bump v4.14.2
+
+ -- Sander van Zoest <svanzoest@ifholdings.com>  Fri, 10 Dec 2021 20:12:07 +0000
+
 expresso-deltapatcher (0.2.1) ubuntu2004; urgency=medium
 
   [ caustik ]
