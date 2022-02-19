@@ -238,12 +238,12 @@ class DeltaPatcher(DeltaPatcherSettings):
         # use the prefix lists from above to return source files mapped to their split destination file(s)
         for src_entry in self.iterate_files("src"):
             extension = src_entry.name.rfind(".")
-            if extension != -1 and src_entry.name[extension + 1 :] in self.split:
+            if src_entry.name in self.dst_files:
+                yield (src_entry, [src_entry])
+            elif extension != -1 and src_entry.name[extension + 1 :] in self.split:
                 dsts = map[src_entry.name[:extension]]
                 if len(dsts):
                     yield (src_entry, dsts)
-            elif src_entry.name in self.dst_files:
-                yield (src_entry, [src_entry])
         return map
 
     def generate_metadata(self):
