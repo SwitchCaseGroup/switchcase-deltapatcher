@@ -1,0 +1,421 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" contentScriptType="application/ecmascript" contentStyleType="text/css" height="1020.8333px" preserveAspectRatio="none" style="width:1536px;height:1020px;background:#00000000;" version="1.1" viewBox="0 0 1536 1020" width="1536.4583px" zoomAndPan="magnify"><defs><linearGradient id="g1vohcpp014n2i0" x1="50%" x2="50%" y1="0%" y2="100%"><stop offset="0%" stop-color="#EDF0F2"/><stop offset="100%" stop-color="#E9ECEF"/></linearGradient><linearGradient id="g1vohcpp014n2i1" x1="50%" x2="50%" y1="0%" y2="100%"><stop offset="0%" stop-color="#59B6EC"/><stop offset="100%" stop-color="#2FA4E7"/></linearGradient></defs><g><rect fill="url(#g1vohcpp014n2i0)" height="45.0846" rx="4.1667" ry="4.1667" style="stroke:#BABDBF;stroke-width:1.0416666666666667;" width="420.8333" x="567.1875" y="14.5833"/><text fill="#2FA4E7" font-family="Verdana" font-size="20.8333" lengthAdjust="spacingAndGlyphs" textLength="393.75" x="580.7292" y="44.338">Binary Delta Patcher Apply Command</text><rect fill="#F8F9FA" height="944.043" rx="4.1667" ry="4.1667" style="stroke:#868E96;stroke-width:1.0416666666666667;" width="405.2083" x="42.7083" y="71.1263"/><text fill="#343A40" font-family="Verdana" font-size="12.5" font-weight="bold" lengthAdjust="spacingAndGlyphs" textLength="93.75" x="198.4375" y="87.9374">deltapatcher.py</text><rect fill="#F8F9FA" height="944.043" rx="4.1667" ry="4.1667" style="stroke:#868E96;stroke-width:1.0416666666666667;" width="450" x="533.3333" y="71.1263"/><text fill="#343A40" font-family="Verdana" font-size="12.5" font-weight="bold" lengthAdjust="spacingAndGlyphs" textLength="79.1667" x="718.75" y="87.9374">Filesystem</text><rect fill="#F8F9FA" height="944.043" rx="4.1667" ry="4.1667" style="stroke:#868E96;stroke-width:1.0416666666666667;" width="164.5833" x="1068.75" y="71.1263"/><text fill="#343A40" font-family="Verdana" font-size="12.5" font-weight="bold" lengthAdjust="spacingAndGlyphs" textLength="64.5833" x="1118.75" y="87.9374">Linux CLI</text><rect fill="#F8F9FA" height="944.043" rx="4.1667" ry="4.1667" style="stroke:#868E96;stroke-width:1.0416666666666667;" width="194.7917" x="1318.75" y="71.1263"/><text fill="#343A40" font-family="Verdana" font-size="12.5" font-weight="bold" lengthAdjust="spacingAndGlyphs" textLength="112.5" x="1359.8958" y="87.9374">External Server</text><rect fill="#EDF0F2" height="478.776" style="stroke:#BABDBF;stroke-width:1.0416666666666667;" width="10.4167" x="338.5417" y="341.7318"/><rect fill="#FFFFFF" height="106.1523" rx="4.1667" ry="4.1667" style="stroke:#868E96;stroke-width:2.0833333333333335;" width="953.125" x="36.4583" y="162.7279"/><rect fill="#FFFFFF" height="545.3776" rx="4.1667" ry="4.1667" style="stroke:#868E96;stroke-width:2.0833333333333335;" width="1493.75" x="36.4583" y="283.4635"/><rect fill="#FFFFFF" height="224.8047" rx="4.1667" ry="4.1667" style="stroke:#868E96;stroke-width:2.0833333333333335;" width="1006.25" x="233.3333" y="476.0091"/><rect fill="#FFFFFF" height="66.6016" rx="4.1667" ry="4.1667" style="stroke:#868E96;stroke-width:2.0833333333333335;" width="1286.4583" x="233.3333" y="715.3971"/><rect fill="#FFFFFF" height="106.1523" rx="4.1667" ry="4.1667" style="stroke:#868E96;stroke-width:2.0833333333333335;" width="800" x="36.4583" y="843.4245"/><line style="stroke:#BABDBF;stroke-width:2.0833333333333335;stroke-dasharray:5.0,5.0;" x1="133.3333" x2="133.3333" y1="145.0195" y2="967.2852"/><line style="stroke:#BABDBF;stroke-width:2.0833333333333335;stroke-dasharray:5.0,5.0;" x1="343.75" x2="343.75" y1="145.0195" y2="967.2852"/><line style="stroke:#BABDBF;stroke-width:2.0833333333333335;stroke-dasharray:5.0,5.0;" x1="606.25" x2="606.25" y1="145.0195" y2="967.2852"/><line style="stroke:#BABDBF;stroke-width:2.0833333333333335;stroke-dasharray:5.0,5.0;" x1="756.25" x2="756.25" y1="145.0195" y2="967.2852"/><line style="stroke:#BABDBF;stroke-width:2.0833333333333335;stroke-dasharray:5.0,5.0;" x1="907.2917" x2="907.2917" y1="145.0195" y2="967.2852"/><line style="stroke:#BABDBF;stroke-width:2.0833333333333335;stroke-dasharray:5.0,5.0;" x1="1151.0417" x2="1151.0417" y1="145.0195" y2="967.2852"/><line style="stroke:#BABDBF;stroke-width:2.0833333333333335;stroke-dasharray:5.0,5.0;" x1="1415.625" x2="1415.625" y1="145.0195" y2="967.2852"/><rect fill="url(#g1vohcpp014n2i1)" height="39.5508" rx="4.1667" ry="4.1667" style="stroke:#2FA4E7;stroke-width:1.5625;" width="89.5833" x="88.5417" y="104.4271"/><text fill="#FFFFFF" font-family="Verdana" font-size="12.5" lengthAdjust="spacingAndGlyphs" textLength="64.5833" x="101.0417" y="128.5299">DeltaPatcher</text><rect fill="url(#g1vohcpp014n2i1)" height="39.5508" rx="4.1667" ry="4.1667" style="stroke:#2FA4E7;stroke-width:1.5625;" width="89.5833" x="88.5417" y="966.2435"/><text fill="#FFFFFF" font-family="Verdana" font-size="12.5" lengthAdjust="spacingAndGlyphs" textLength="64.5833" x="101.0417" y="990.3463">DeltaPatcher</text><rect fill="url(#g1vohcpp014n2i1)" height="39.5508" rx="4.1667" ry="4.1667" style="stroke:#2FA4E7;stroke-width:1.5625;" width="112.5" x="289.5833" y="100.2604"/><rect fill="url(#g1vohcpp014n2i1)" height="39.5508" rx="4.1667" ry="4.1667" style="stroke:#2FA4E7;stroke-width:1.5625;" width="112.5" x="285.4167" y="104.4271"/><text fill="#FFFFFF" font-family="Verdana" font-size="12.5" lengthAdjust="spacingAndGlyphs" textLength="87.5" x="297.9167" y="128.5299">XDelta3Patch</text><rect fill="url(#g1vohcpp014n2i1)" height="39.5508" rx="4.1667" ry="4.1667" style="stroke:#2FA4E7;stroke-width:1.5625;" width="112.5" x="289.5833" y="966.2435"/><rect fill="url(#g1vohcpp014n2i1)" height="39.5508" rx="4.1667" ry="4.1667" style="stroke:#2FA4E7;stroke-width:1.5625;" width="112.5" x="285.4167" y="970.4102"/><text fill="#FFFFFF" font-family="Verdana" font-size="12.5" lengthAdjust="spacingAndGlyphs" textLength="87.5" x="297.9167" y="994.5129">XDelta3Patch</text><rect fill="url(#g1vohcpp014n2i1)" height="39.5508" rx="4.1667" ry="4.1667" style="stroke:#2FA4E7;stroke-width:1.5625;" width="55.2083" x="579.1667" y="104.4271"/><text fill="#FFFFFF" font-family="Verdana" font-size="12.5" lengthAdjust="spacingAndGlyphs" textLength="30.2083" x="591.6667" y="128.5299">[src]</text><rect fill="url(#g1vohcpp014n2i1)" height="39.5508" rx="4.1667" ry="4.1667" style="stroke:#2FA4E7;stroke-width:1.5625;" width="55.2083" x="579.1667" y="966.2435"/><text fill="#FFFFFF" font-family="Verdana" font-size="12.5" lengthAdjust="spacingAndGlyphs" textLength="30.2083" x="591.6667" y="990.3463">[src]</text><rect fill="url(#g1vohcpp014n2i1)" height="39.5508" rx="4.1667" ry="4.1667" style="stroke:#2FA4E7;stroke-width:1.5625;" width="56.25" x="728.125" y="104.4271"/><text fill="#FFFFFF" font-family="Verdana" font-size="12.5" lengthAdjust="spacingAndGlyphs" textLength="31.25" x="740.625" y="128.5299">[dst]</text><rect fill="url(#g1vohcpp014n2i1)" height="39.5508" rx="4.1667" ry="4.1667" style="stroke:#2FA4E7;stroke-width:1.5625;" width="56.25" x="728.125" y="966.2435"/><text fill="#FFFFFF" font-family="Verdana" font-size="12.5" lengthAdjust="spacingAndGlyphs" textLength="31.25" x="740.625" y="990.3463">[dst]</text><rect fill="url(#g1vohcpp014n2i1)" height="39.5508" rx="4.1667" ry="4.1667" style="stroke:#2FA4E7;stroke-width:1.5625;" width="59.375" x="878.125" y="104.4271"/><text fill="#FFFFFF" font-family="Verdana" font-size="12.5" lengthAdjust="spacingAndGlyphs" textLength="34.375" x="890.625" y="128.5299">[pch]</text><rect fill="url(#g1vohcpp014n2i1)" height="39.5508" rx="4.1667" ry="4.1667" style="stroke:#2FA4E7;stroke-width:1.5625;" width="59.375" x="878.125" y="966.2435"/><text fill="#FFFFFF" font-family="Verdana" font-size="12.5" lengthAdjust="spacingAndGlyphs" textLength="34.375" x="890.625" y="990.3463">[pch]</text><rect fill="url(#g1vohcpp014n2i1)" height="39.5508" rx="4.1667" ry="4.1667" style="stroke:#2FA4E7;stroke-width:1.5625;" width="72.9167" x="1114.5833" y="104.4271"/><text fill="#FFFFFF" font-family="Verdana" font-size="12.5" lengthAdjust="spacingAndGlyphs" textLength="47.9167" x="1127.0833" y="128.5299">xdelta3</text><rect fill="url(#g1vohcpp014n2i1)" height="39.5508" rx="4.1667" ry="4.1667" style="stroke:#2FA4E7;stroke-width:1.5625;" width="72.9167" x="1114.5833" y="966.2435"/><text fill="#FFFFFF" font-family="Verdana" font-size="12.5" lengthAdjust="spacingAndGlyphs" textLength="47.9167" x="1127.0833" y="990.3463">xdelta3</text><rect fill="url(#g1vohcpp014n2i1)" height="39.5508" rx="4.1667" ry="4.1667" style="stroke:#2FA4E7;stroke-width:1.5625;" width="103.125" x="1364.5833" y="104.4271"/><text fill="#FFFFFF" font-family="Verdana" font-size="12.5" lengthAdjust="spacingAndGlyphs" textLength="78.125" x="1377.0833" y="128.5299">HTTP Server</text><rect fill="url(#g1vohcpp014n2i1)" height="39.5508" rx="4.1667" ry="4.1667" style="stroke:#2FA4E7;stroke-width:1.5625;" width="103.125" x="1364.5833" y="966.2435"/><text fill="#FFFFFF" font-family="Verdana" font-size="12.5" lengthAdjust="spacingAndGlyphs" textLength="78.125" x="1377.0833" y="990.3463">HTTP Server</text><rect fill="#EDF0F2" height="478.776" style="stroke:#BABDBF;stroke-width:1.0416666666666667;" width="10.4167" x="338.5417" y="341.7318"/><path d="M40.625,162.7279 L157.2917,162.7279 L157.2917,178.3529 L146.875,188.7695 L36.4583,188.7695 L36.4583,166.8945 " fill="#EEEEEE" style="stroke:#868E96;stroke-width:1.0416666666666667;"/><rect fill="none" height="106.1523" rx="4.1667" ry="4.1667" style="stroke:#868E96;stroke-width:2.0833333333333335;" width="953.125" x="36.4583" y="162.7279"/><text fill="#033C73" font-family="Verdana" font-size="12.5" font-weight="bold" lengthAdjust="spacingAndGlyphs" textLength="63.5417" x="57.2917" y="180.5806">initialize</text><polygon fill="#2FA4E7" points="895.3125,216.8294,905.7292,220.9961,895.3125,225.1628,899.4792,220.9961" style="stroke:#2FA4E7;stroke-width:1.0416666666666667;"/><line style="stroke:#2FA4E7;stroke-width:3.125;" x1="133.3333" x2="901.5625" y1="220.9961" y2="220.9961"/><text fill="#343A40" font-family="Verdana" font-size="12.5" lengthAdjust="spacingAndGlyphs" textLength="90.625" x="145.8333" y="210.7564">read manifest</text><polygon fill="#2FA4E7" points="743.75,256.3802,754.1667,260.5469,743.75,264.7135,747.9167,260.5469" style="stroke:#2FA4E7;stroke-width:1.0416666666666667;"/><line style="stroke:#2FA4E7;stroke-width:3.125;" x1="133.3333" x2="750" y1="260.5469" y2="260.5469"/><text fill="#343A40" font-family="Verdana" font-size="12.5" lengthAdjust="spacingAndGlyphs" textLength="168.75" x="145.8333" y="250.3072">create directory structure</text><path d="M40.625,283.4635 L134.375,283.4635 L134.375,299.0885 L123.9583,309.5052 L36.4583,309.5052 L36.4583,287.6302 " fill="#EEEEEE" style="stroke:#868E96;stroke-width:1.0416666666666667;"/><rect fill="none" height="545.3776" rx="4.1667" ry="4.1667" style="stroke:#868E96;stroke-width:2.0833333333333335;" width="1493.75" x="36.4583" y="283.4635"/><text fill="#033C73" font-family="Verdana" font-size="12.5" font-weight="bold" lengthAdjust="spacingAndGlyphs" textLength="40.625" x="57.2917" y="301.3163">apply</text><polygon fill="#2FA4E7" points="326.0417,337.5651,336.4583,341.7318,326.0417,345.8984,330.2083,341.7318" style="stroke:#2FA4E7;stroke-width:1.0416666666666667;"/><line style="stroke:#2FA4E7;stroke-width:3.125;" x1="133.3333" x2="332.2917" y1="341.7318" y2="341.7318"/><text fill="#343A40" font-family="Verdana" font-size="12.5" lengthAdjust="spacingAndGlyphs" textLength="102.0833" x="145.8333" y="331.4921">apply delta files</text><polygon fill="#2FA4E7" points="743.75,377.1159,754.1667,381.2826,743.75,385.4492,747.9167,381.2826" style="stroke:#2FA4E7;stroke-width:1.0416666666666667;"/><line style="stroke:#2FA4E7;stroke-width:3.125;" x1="348.9583" x2="750" y1="381.2826" y2="381.2826"/><text fill="#343A40" font-family="Verdana" font-size="12.5" lengthAdjust="spacingAndGlyphs" textLength="112.5" x="361.4583" y="371.0429">validate dst hash</text><polygon fill="#2FA4E7" points="594.2708,416.6667,604.6875,420.8333,594.2708,425,598.4375,420.8333" style="stroke:#2FA4E7;stroke-width:1.0416666666666667;"/><line style="stroke:#2FA4E7;stroke-width:3.125;" x1="348.9583" x2="600.5208" y1="420.8333" y2="420.8333"/><text fill="#343A40" font-family="Verdana" font-size="12.5" lengthAdjust="spacingAndGlyphs" textLength="111.4583" x="361.4583" y="410.5937">validate src hash</text><polygon fill="#2FA4E7" points="895.3125,456.2174,905.7292,460.3841,895.3125,464.5508,899.4792,460.3841" style="stroke:#2FA4E7;stroke-width:1.0416666666666667;"/><line style="stroke:#2FA4E7;stroke-width:3.125;" x1="348.9583" x2="901.5625" y1="460.3841" y2="460.3841"/><text fill="#343A40" font-family="Verdana" font-size="12.5" lengthAdjust="spacingAndGlyphs" textLength="115.625" x="361.4583" y="450.1444">validate pch hash</text><path d="M237.5,476.0091 L480.2083,476.0091 L480.2083,491.6341 L469.7917,502.0508 L233.3333,502.0508 L233.3333,480.1758 " fill="#EEEEEE" style="stroke:#868E96;stroke-width:1.0416666666666667;"/><rect fill="none" height="224.8047" rx="4.1667" ry="4.1667" style="stroke:#868E96;stroke-width:2.0833333333333335;" width="1006.25" x="233.3333" y="476.0091"/><text fill="#033C73" font-family="Verdana" font-size="12.5" font-weight="bold" lengthAdjust="spacingAndGlyphs" textLength="189.5833" x="254.1667" y="493.8619">if hash validation success</text><polygon fill="#2FA4E7" points="1138.5417,530.1107,1148.9583,534.2773,1138.5417,538.444,1142.7083,534.2773" style="stroke:#2FA4E7;stroke-width:1.0416666666666667;"/><line style="stroke:#2FA4E7;stroke-width:3.125;" x1="348.9583" x2="1144.7917" y1="534.2773" y2="534.2773"/><text fill="#343A40" font-family="Verdana" font-size="12.5" lengthAdjust="spacingAndGlyphs" textLength="58.3333" x="361.4583" y="524.0377">apply diff</text><polygon fill="#2FA4E7" points="618.2292,569.6615,607.8125,573.8281,618.2292,577.9948,614.0625,573.8281" style="stroke:#2FA4E7;stroke-width:1.0416666666666667;"/><line style="stroke:#2FA4E7;stroke-width:3.125;" x1="611.9792" x2="1150" y1="573.8281" y2="573.8281"/><text fill="#343A40" font-family="Verdana" font-size="12.5" lengthAdjust="spacingAndGlyphs" textLength="53.125" x="629.6875" y="563.5885">read file</text><polygon fill="#2FA4E7" points="919.2708,609.2122,908.8542,613.3789,919.2708,617.5456,915.1042,613.3789" style="stroke:#2FA4E7;stroke-width:1.0416666666666667;"/><line style="stroke:#2FA4E7;stroke-width:3.125;" x1="913.0208" x2="1150" y1="613.3789" y2="613.3789"/><text fill="#343A40" font-family="Verdana" font-size="12.5" lengthAdjust="spacingAndGlyphs" textLength="53.125" x="930.7292" y="603.1392">read file</text><polygon fill="#2FA4E7" points="767.7083,648.763,757.2917,652.9297,767.7083,657.0964,763.5417,652.9297" style="stroke:#2FA4E7;stroke-width:1.0416666666666667;"/><line style="stroke:#2FA4E7;stroke-width:3.125;" x1="761.4583" x2="1150" y1="652.9297" y2="652.9297"/><text fill="#343A40" font-family="Verdana" font-size="12.5" lengthAdjust="spacingAndGlyphs" textLength="53.125" x="779.1667" y="642.69">read file</text><polygon fill="#2FA4E7" points="767.7083,688.3138,757.2917,692.4805,767.7083,696.6471,763.5417,692.4805" style="stroke:#2FA4E7;stroke-width:1.0416666666666667;"/><line style="stroke:#2FA4E7;stroke-width:3.125;" x1="761.4583" x2="1150" y1="692.4805" y2="692.4805"/><text fill="#343A40" font-family="Verdana" font-size="12.5" lengthAdjust="spacingAndGlyphs" textLength="54.1667" x="779.1667" y="682.2408">write file</text><path d="M237.5,715.3971 L502.0833,715.3971 L502.0833,731.0221 L491.6667,741.4388 L233.3333,741.4388 L233.3333,719.5638 " fill="#EEEEEE" style="stroke:#868E96;stroke-width:1.0416666666666667;"/><rect fill="none" height="66.6016" rx="4.1667" ry="4.1667" style="stroke:#868E96;stroke-width:2.0833333333333335;" width="1286.4583" x="233.3333" y="715.3971"/><text fill="#033C73" font-family="Verdana" font-size="12.5" font-weight="bold" lengthAdjust="spacingAndGlyphs" textLength="211.4583" x="254.1667" y="733.2499">else (hash validation failure)</text><polygon fill="#2FA4E7" points="1403.6458,769.4987,1414.0625,773.6654,1403.6458,777.832,1407.8125,773.6654" style="stroke:#2FA4E7;stroke-width:1.0416666666666667;"/><line style="stroke:#2FA4E7;stroke-width:3.125;" x1="348.9583" x2="1409.8958" y1="773.6654" y2="773.6654"/><text fill="#343A40" font-family="Verdana" font-size="12.5" lengthAdjust="spacingAndGlyphs" textLength="128.125" x="361.4583" y="763.4257">download dst file(s)</text><polygon fill="#2FA4E7" points="144.7917,816.3411,134.375,820.5078,144.7917,824.6745,140.625,820.5078" style="stroke:#2FA4E7;stroke-width:1.0416666666666667;"/><line style="stroke:#2FA4E7;stroke-width:3.125;stroke-dasharray:2.0,2.0;" x1="138.5417" x2="342.7083" y1="820.5078" y2="820.5078"/><text fill="#343A40" font-family="Verdana" font-size="12.5" lengthAdjust="spacingAndGlyphs" textLength="169.7917" x="156.25" y="810.2681">return src/dst/pch hashes</text><path d="M40.625,843.4245 L147.9167,843.4245 L147.9167,859.0495 L137.5,869.4661 L36.4583,869.4661 L36.4583,847.5911 " fill="#EEEEEE" style="stroke:#868E96;stroke-width:1.0416666666666667;"/><rect fill="none" height="106.1523" rx="4.1667" ry="4.1667" style="stroke:#868E96;stroke-width:2.0833333333333335;" width="800" x="36.4583" y="843.4245"/><text fill="#033C73" font-family="Verdana" font-size="12.5" font-weight="bold" lengthAdjust="spacingAndGlyphs" textLength="54.1667" x="57.2917" y="861.2773">finalize</text><polygon fill="#2FA4E7" points="743.75,897.526,754.1667,901.6927,743.75,905.8594,747.9167,901.6927" style="stroke:#2FA4E7;stroke-width:1.0416666666666667;"/><line style="stroke:#2FA4E7;stroke-width:3.125;" x1="133.3333" x2="750" y1="901.6927" y2="901.6927"/><text fill="#343A40" font-family="Verdana" font-size="12.5" lengthAdjust="spacingAndGlyphs" textLength="167.7083" x="145.8333" y="891.453">remove obsolete files/dirs</text><polygon fill="#2FA4E7" points="743.75,937.0768,754.1667,941.2435,743.75,945.4102,747.9167,941.2435" style="stroke:#2FA4E7;stroke-width:1.0416666666666667;"/><line style="stroke:#2FA4E7;stroke-width:3.125;" x1="133.3333" x2="750" y1="941.2435" y2="941.2435"/><text fill="#343A40" font-family="Verdana" font-size="12.5" lengthAdjust="spacingAndGlyphs" textLength="129.1667" x="145.8333" y="931.0038">apply file properties</text><!--MD5=[fc6f05a92391390fc442ab06430807d8]
+@startuml apply-sequence
+
+!include deltapatcher.iuml
+
+title Binary Delta Patcher Apply Command
+
+group initialize
+  DeltaPatcher -> pch : read manifest
+  DeltaPatcher -> dst : create directory structure
+end
+
+group apply
+  DeltaPatcher -> XDelta3Patch : apply delta files
+  activate XDelta3Patch
+    XDelta3Patch -> dst : validate dst hash
+    XDelta3Patch -> src : validate src hash
+    XDelta3Patch -> pch : validate pch hash
+    group if hash validation success
+      XDelta3Patch -> xdelta3 : apply diff
+      xdelta3 -> src : read file
+      xdelta3 -> pch : read file
+      xdelta3 -> dst : read file
+      xdelta3 -> dst : write file
+    end
+    group else (hash validation failure)
+      XDelta3Patch -> HTTP : download dst file(s)
+    end
+  return return src/dst/pch hashes
+end
+
+group finalize
+  DeltaPatcher -> dst : remove obsolete files/dirs
+  DeltaPatcher -> dst : apply file properties
+end
+
+@enduml
+
+@startuml apply-sequence
+
+
+
+
+skinparam backgroundColor transparent
+
+
+
+
+
+
+
+skinparam defaultFontName        "Verdana"
+skinparam defaultFontSize        12
+skinparam dpi                    100
+skinparam shadowing              false
+skinparam roundcorner            8
+skinparam ParticipantPadding     40
+skinparam BoxPadding             40
+skinparam Padding                5
+skinparam ArrowColor             #868E96
+skinparam stereotype {
+    CBackgroundColor #EDF0F2
+    CBorderColor #BABDBF
+    ABackgroundColor #8FB961
+    ABorderColor #5C862E
+    IBackgroundColor #D2494E
+    IBorderColor #9F161B
+    EBackgroundColor #E47833
+    EBorderColor #B14500
+    NBackgroundColor #35638F
+    NBorderColor #02305C
+}
+skinparam title {
+	FontColor	                 #2FA4E7
+	BorderColor	                 #BABDBF
+	FontSize	    	         20
+	BorderRoundCorner            8
+	BorderThickness 	         1
+	BackgroundColor              #EDF0F2-#E9ECEF
+}
+
+
+skinparam legend {
+	BackgroundColor #E9ECEF
+	BorderColor #BABDBF
+	FontColor #343A40
+}
+
+skinparam swimlane {
+	BorderColor #033C73
+	BorderThickness 2
+	TitleBackgroundColor  #EDF0F2-#E9ECEF
+	TitleFontColor #2FA4E7
+}
+
+
+skinparam activity {
+		FontColor #FFF
+	BorderColor #2FA4E7
+	BackgroundColor #59B6EC-#2FA4E7
+	BarColor #73A839
+	StartColor #033C73
+	EndColor #033C73
+	DiamondBackgroundColor #FFF-#EDF0F2
+  	DiamondBorderColor #BABDBF
+	DiamondFontColor #343A40
+}
+
+
+skinparam participant {
+		FontColor #FFF
+	BorderColor #2FA4E7
+	BackgroundColor #59B6EC-#2FA4E7
+	ParticipantBorderThickness 2
+}
+
+
+skinparam actor {
+		FontColor #FFF
+	BorderColor #2FA4E7
+	BackgroundColor #59B6EC-#2FA4E7
+	FontColor #343A40
+}
+
+
+skinparam arrow {
+	Thickness 3
+	Color #2FA4E7
+	FontColor #343A40
+}
+
+
+skinparam sequence {
+	BorderColor #2FA4E7
+	TitleFontColor #2FA4E7
+	BackgroundColor transparent
+	StartColor #2FA4E7
+	EndColor #2FA4E7
+	BoxBackgroundColor #F8F9FA
+	BoxBorderColor #868E96
+	BoxFontColor #343A40
+	LifeLineBorderColor #BABDBF
+	LifeLineBorderThickness 2
+	LifeLineBackgroundColor #EDF0F2
+	GroupBorderColor #868E96
+	GroupFontColor #343A40
+	GroupHeaderFontColor #033C73
+	DividerBackgroundColor #FFF-#F8F9FA
+    DividerBorderColor #868E96
+    DividerBorderThickness 2
+    DividerFontColor #343A40
+	ReferenceBackgroundColor transparent
+	ReferenceBorderColor #868E96
+	ReferenceFontColor #343A40
+	ReferenceHeaderFontColor #033C73
+}
+
+
+skinparam partition {
+	BorderColor #2FA4E7
+	FontColor #2FA4E7
+	BackgroundColor transparent
+}
+
+
+skinparam collections {
+		FontColor #FFF
+	BorderColor #2FA4E7
+	BackgroundColor #59B6EC-#2FA4E7
+}
+
+
+skinparam control {
+		FontColor #FFF
+	BorderColor #2FA4E7
+	BackgroundColor #59B6EC-#2FA4E7
+	FontColor #343A40
+}
+
+
+skinparam entity {
+		FontColor #FFF
+	BorderColor #2FA4E7
+	BackgroundColor #59B6EC-#2FA4E7
+	FontColor #343A40
+}
+
+
+skinparam boundary {
+		FontColor #FFF
+	BorderColor #2FA4E7
+	BackgroundColor #59B6EC-#2FA4E7
+	FontColor #343A40
+}
+
+
+skinparam agent {
+	BackgroundColor #orange
+	BorderColor #999999
+	FontColor #333333
+}
+
+
+skinparam note {
+	BorderThickness 1
+	BackgroundColor #35638F-#033C73
+	BorderColor #033C73
+	FontColor #FFF
+}
+
+
+skinparam artifact {
+	BackgroundColor #FFF-#F8F9FA
+	BorderColor #BABDBF
+	FontColor #343A40
+}
+
+
+skinparam component {
+		FontColor #FFF
+	BorderColor #2FA4E7
+	BackgroundColor #59B6EC-#2FA4E7
+}
+
+
+skinparam interface {
+	BackgroundColor  #D2494E
+	BorderColor  #C71C22
+	FontColor #343A40
+}
+
+
+skinparam storage {
+	BackgroundColor #E47833-#DD5600
+  	BorderColor #DD5600
+	FontColor #FFF
+}
+
+
+skinparam node {
+	BackgroundColor #EDF0F2-#E9ECEF
+	BorderColor #E9ECEF
+	FontColor #343A40
+}
+
+
+skinparam cloud {
+	BackgroundColor #F2FCFE-#eeeeee
+	BorderColor #F2FCFE
+	FontColor #2FA4E7
+}
+
+
+skinparam database {
+		FontColor #FFF
+	BorderColor #2FA4E7
+	BackgroundColor #59B6EC-#2FA4E7
+	FontColor #343A40
+}
+
+
+skinparam class {
+		FontColor #FFF
+	BorderColor #2FA4E7
+	BackgroundColor #59B6EC-#2FA4E7
+	HeaderBackgroundColor #2FA4E7-#2683B9
+	StereotypeFontColor #343A40
+	BorderThickness 1
+	AttributeFontColor #F8F9FA
+	AttributeFontSize 11
+}
+
+
+skinparam object {
+		FontColor #FFF
+	BorderColor #2FA4E7
+	BackgroundColor #59B6EC-#2FA4E7
+	StereotypeFontColor #343A40
+	BorderThickness 1
+	AttributeFontColor #343A40
+	AttributeFontSize 11
+}
+
+
+skinparam usecase {
+		FontColor #FFF
+	BorderColor #2FA4E7
+	BackgroundColor #59B6EC-#2FA4E7
+	BorderThickness 2
+	StereotypeFontColor #2FA4E7
+}
+
+
+skinparam rectangle {
+	FontColor #2FA4E7
+	BorderColor #59B6EC
+	BackgroundColor transparent
+	BorderThickness 2
+	StereotypeFontColor #2FA4E7
+}
+
+
+skinparam package {
+	FontColor #2FA4E7
+	BorderColor #59B6EC
+	BackgroundColor transparent
+	BorderThickness 2
+}
+
+
+skinparam folder {
+	BackgroundColor #FFF-#EDF0F2
+  	BorderColor #DD5600
+	FontColor #DD5600
+	BorderThickness 2
+}
+
+
+skinparam frame {
+	BackgroundColor #FFF-#EDF0F2
+  	BorderColor #033C73
+	FontColor #033C73
+	BorderThickness 2
+}
+
+
+skinparam state {
+		FontColor #FFF
+	BorderColor #2FA4E7
+	BackgroundColor #59B6EC-#2FA4E7
+	BorderColor #2683B9
+	StartColor #033C73
+	EndColor #033C73
+	AttributeFontColor #343A40
+	AttributeFontSize 11
+}
+
+
+skinparam queue {
+		FontColor #FFF
+	BorderColor #2FA4E7
+	BackgroundColor #59B6EC-#2FA4E7
+}
+
+
+skinparam card {
+	BackgroundColor #35638F-#033C73
+	BorderColor #033C73
+	FontColor #FFF
+}
+
+
+skinparam file {
+	BackgroundColor #EDF0F2-#E9ECEF
+	BorderColor #033C73
+	FontColor #868E96
+
+}
+
+
+
+box "deltapatcher.py"
+  participant DeltaPatcher as DeltaPatcher
+  collections XDelta3Patch as XDelta3Patch
+end box
+
+box "Filesystem"
+  participant "[src]" as src
+  participant "[dst]" as dst
+  participant "[pch]" as pch
+end box
+
+box "Linux CLI"
+  participant "xdelta3" as xdelta3
+end box
+
+box "External Server"
+  participant "HTTP Server" as HTTP
+end box
+
+title Binary Delta Patcher Apply Command
+
+group initialize
+  DeltaPatcher -> pch : read manifest
+  DeltaPatcher -> dst : create directory structure
+end
+
+group apply
+  DeltaPatcher -> XDelta3Patch : apply delta files
+  activate XDelta3Patch
+    XDelta3Patch -> dst : validate dst hash
+    XDelta3Patch -> src : validate src hash
+    XDelta3Patch -> pch : validate pch hash
+    group if hash validation success
+      XDelta3Patch -> xdelta3 : apply diff
+      xdelta3 -> src : read file
+      xdelta3 -> pch : read file
+      xdelta3 -> dst : read file
+      xdelta3 -> dst : write file
+    end
+    group else (hash validation failure)
+      XDelta3Patch -> HTTP : download dst file(s)
+    end
+  return return src/dst/pch hashes
+end
+
+group finalize
+  DeltaPatcher -> dst : remove obsolete files/dirs
+  DeltaPatcher -> dst : apply file properties
+end
+
+@enduml
+
+PlantUML version 1.2020.22(Sun Dec 06 04:36:27 EST 2020)
+(GPL source distribution)
+Java Runtime: OpenJDK Runtime Environment
+JVM: OpenJDK 64-Bit Server VM
+Default Encoding: UTF-8
+Language: en
+Country: null
+--></g></svg>
