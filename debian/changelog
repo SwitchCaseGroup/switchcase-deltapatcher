@@ -1,3 +1,13 @@
+switchcase-deltapatcher (0.2.3+switchcase.bionic.2~1.gbpb287de) UNRELEASED; urgency=medium
+
+  ** SNAPSHOT build @b287de386b685a6a204798a3f63edb46f4242654 **
+
+  * trigger build
+  * bump azure piplines
+  * Add back setuptools dependency
+
+ -- Sander van Zoest <sander@switchcasegroup.com>  Tue, 17 May 2022 20:51:30 +0000
+
 switchcase-deltapatcher (0.2.3+switchcase.bionic.1) bionic; urgency=medium
 
   * Backport to bionic
