@@ -24,16 +24,8 @@ pr:
   drafts: true
 
 jobs:
-- template: jobs/build_python.yml@templates
-  parameters:
-    pool:
-      vmImage: "ubuntu-20.04"
-    preBuild:
-      - bash: |
-          sudo apt-get -yq update
-          sudo apt-get install -y xdelta3
-        env:
-          DEBIAN_FRONTEND: "noninteractive"
 - template: jobs/build_deb.yml@templates
   parameters:
+    pool:
+      vmImage: "ubuntu-18.04"
     artifactName: "switchcase-deltapatcher"
