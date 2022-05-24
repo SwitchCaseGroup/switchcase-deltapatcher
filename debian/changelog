@@ -1,3 +1,10 @@
+switchcase-deltapatcher (0.2.4) ubuntu2004; urgency=medium
+
+  * bump azure pipelines
+  * Create LICENSE
+
+ -- Sander van Zoest <sander@switchcasegroup.com>  Tue, 24 May 2022 23:20:52 +0000
+
 switchcase-deltapatcher (0.2.3) ubuntu2004; urgency=medium
 
   * try always picking exact-match filename if available
