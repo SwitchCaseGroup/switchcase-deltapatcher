@@ -1,0 +1,20 @@
+!include https://raw.githubusercontent.com/bschwarz/puml-themes/master/themes/cerulean/puml-theme-cerulean.puml
+
+box "deltapatcher.py"
+  participant DeltaPatcher as DeltaPatcher
+  collections XDelta3Patch as XDelta3Patch
+end box
+
+box "Filesystem"
+  participant "[src]" as src
+  participant "[dst]" as dst
+  participant "[pch]" as pch
+end box
+
+box "Linux CLI"
+  participant "xdelta3" as xdelta3
+end box
+
+box "External Server"
+  participant "HTTP Server" as HTTP
+end box

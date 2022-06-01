@@ -1,0 +1,39 @@
+# Python package
+# https://docs.microsoft.com/azure/devops/pipelines/languages/python
+# https://aka.ms/yaml
+resources:
+  repositories:
+  - repository: templates
+    type: github
+    endpoint: switchcase-build
+    name: SwitchCaseGroup/switchcase-azure-pipelines-templates
+    ref: refs/tags/v5.8.0
+  - repository: self
+    clean: true
+
+trigger:
+  batch: true
+  branches:
+    include:
+      - master
+  paths:
+    exclude:
+      - README.md
+pr:
+  autoCancel: true
+  drafts: true
+
+jobs:
+- template: jobs/build_python.yml@templates
+  parameters:
+    pool:
+      vmImage: "ubuntu-20.04"
+    preBuild:
+      - bash: |
+          sudo apt-get -yq update
+          sudo apt-get install -y xdelta3
+        env:
+          DEBIAN_FRONTEND: "noninteractive"
+- template: jobs/build_deb.yml@templates
+  parameters:
+    artifactName: "switchcase-deltapatcher"
