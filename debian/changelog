@@ -1,3 +1,9 @@
+switchcase-deltapatcher (0.2.4+switchcase.bionic.1) bionic; urgency=medium
+
+  * Backport to bionic
+
+-- Sander van Zoest <sander@switchcasegroup.com>  Fri, 27 May 2022 20:28:14 +0000
+
 switchcase-deltapatcher (0.2.4) ubuntu2004; urgency=medium
 
   * bump azure pipelines
@@ -9,7 +15,7 @@ switchcase-deltapatcher (0.2.3) ubuntu2004; urgency=medium
 
   * try always picking exact-match filename if available
 
- -- Sander van Zoest <svanzoest@ifholdings.com>  Tue, 17 May 2022 20:28:14 +0000
+ -- Sander van Zoest <sander@switchcasegroup.com>  Tue, 17 May 2022 20:28:14 +0000
 
 switchcase-deltapatcher (0.2.2) focal; urgency=medium
 
