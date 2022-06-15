@@ -1,3 +1,11 @@
+switchcase-deltapatcher (0.2.4+switchcase.bionic.2~1.gbp211d27) UNRELEASED; urgency=medium
+
+  ** SNAPSHOT build @211d27605f5fb3f0605d356aead887afd566c037 **
+
+  * UNRELEASED
+
+ -- Sander van Zoest <sander@switchcasegroup.com>  Wed, 15 Jun 2022 01:15:52 +0000
+
 switchcase-deltapatcher (0.2.4+switchcase.bionic.1) bionic; urgency=medium
 
   * Backport to bionic
